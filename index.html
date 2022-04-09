@@ -7,12 +7,7 @@
     <meta name="author" content="Yuriy Lazutin" >
     <meta name="description" content="Video hosting portal">
     <meta name="keywords" content="Yuriy Lazutin, Лазутин Юрий, VideoBox">
-    <meta name="revisit-after" content="7 days">
-    <meta name="distribution" content="Global">
-<!--
-    <meta name="robots" content="index,follow">
-    <meta http-equiv="Content-Language" content="ru-RU">
--->
+
     <title>VideoBox</title>
 
     <style>
@@ -21,24 +16,21 @@
              padding: 0;
            }
 
-      #div1 {
-              width: 80%;
-              float: left;
-              height: 100%;
-              position: absolute;
-            }
+      #lframe {
+                width: 80%;
+                height: 100%;
+                position: absolute;
+              }
 
-      #div2 {
-              width: 20%;
-              float: left;
-              height: 100%;
-              position: absolute;
-            }
+      #rframe {
+                width: 20%;
+                height: 100%;
+                position: absolute;
+              }
 
       #splitter {
                   background-color: black;
                   width: 1px;
-                  float: left;
                   height: 100%;
                   position: absolute;
                   cursor: w-resize;
@@ -47,62 +39,57 @@
   </head>
 
   <body onload="init()">
-    <div id="div1"> <H1>Left frame</H1> </div>
+    <iframe src="http://109.197.125.82:80" name="lframe" id="lframe" title="Video Box Player" style="border: 0;">Video Box Player</iframe>
+    <script>
+      var lframe;
+      lframe = document.getElementById('lframe');
+      lframe.src += location.search;
+    </script>
     <div id="splitter"></div>
-    <div id="div2"> <H1>Right frame</H1> </div>
+    <div id="rframe"> <H1>Right frame</H1> </div>
   </body>
 </html>
 
 <script type="text/javascript" language="JavaScript">
-var splitter, frame1, frame2;
-var last_x, window_width;
+var splitter, lframe, rframe;
 
 function init()
 {
-  window_width = window.innerWidth;
+  lframe = document.getElementById("lframe");
   splitter = document.getElementById("splitter");
-  frame1 = document.getElementById("div1");
-  frame2 = document.getElementById("div2");
-  var dx = frame1.clientWidth;
-  splitter.style.marginLeft = dx + "px";
-  dx += splitter.clientWidth;
-  frame2.style.marginLeft = dx + "px";
-  dx = window_width - dx;
-  frame2.style.width = dx + "px";
+  rframe = document.getElementById("rframe");
+
+  splitter.style.marginLeft = lframe.clientWidth + "px";
+  rframe.style.marginLeft = lframe.clientWidth + splitter.clientWidth + "px";
+
   splitter.addEventListener("mousedown", spMouseDown);
 }
 
 function spMouseDown(e)
 {
+  lframe.style.pointerEvents = "none";
   splitter.removeEventListener("mousedown", spMouseDown);
   window.addEventListener("mousemove", spMouseMove);
   window.addEventListener("mouseup", spMouseUp);
-  last_x = e.clientX;
 }
 
 function spMouseUp(e)
 {
+  lframe.style.width = e.clientX + "px";
+  splitter.style.marginLeft = e.clientX + "px";
+  rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
+
+  lframe.style.pointerEvents = "auto";
+
   window.removeEventListener("mousemove", spMouseMove);
   window.removeEventListener("mouseup", spMouseUp);
   splitter.addEventListener("mousedown", spMouseDown);
-  resetPosition(last_x);
 }
 
 function spMouseMove(e)
 {
-  resetPosition(e.clientX);
-}
-
-function resetPosition(curpos)
-{
-  var dx = curpos - last_x;
-  dx += frame1.clientWidth;
-  frame1.style.width = dx + "px";
-  splitter.style.marginLeft = dx + "px";
-  dx += splitter.clientWidth;
-  frame2.style.marginLeft = dx + "px";
-  dx = window_width - dx;
-  frame2.style.width = dx + "px";
-  last_x = curpos;
+  lframe.style.width = e.clientX + "px";
+  splitter.style.marginLeft = e.clientX + "px";
+  rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
 }
 </script>
