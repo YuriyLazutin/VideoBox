@@ -10,8 +10,48 @@
 #define   SERVER_PORT             5810
 #define   SERVER_LISTEN_BACKLOG   32
 
+static char* ok_response =
+  "HTTP/1.0 200 OK\n"
+  "Content-type: text/html\n"
+  "\n";
+
+static char* bad_request_response =
+  "HTTP/1.0 400 Bad Reguest\n"
+  "Content-type: text/html\n"
+  "\n"
+  "<html>\n"
+  " <body>\n"
+  "  <h1>Bad Request</h1>\n"
+  "  <p>This server did not understand your request.</p>\n"
+  " </body>\n"
+  "</html>\n";
+
+static char* not_found_response =
+  "HTTP/1.0 404 Not Found\n"
+  "Content-type: text/html\n"
+  "\n"
+  "<html>\n"
+  " <body>\n"
+  "  <h1>Not Found</h1>\n"
+  "  <p>The requested URL was not found.</p>\n"
+  " </body>\n"
+  "</html>\n";
+
+static char* bad_method_response =
+  "HTTP/1.0 501 Method Not Implemented\n"
+  "Content-type: text/html\n"
+  "\n"
+  "<html>\n"
+  " <body>\n"
+  "  <h1>Method Not Implemented</h1>\n"
+  "  <p>The requested method is not supported.</p>\n"
+  " </body>\n"
+  "</html>\n";
+
 // catch SIGCHLD
 void clean_up_child_process(int);
+void process_connection(int connection_fd);
+void process_get(int connection_fd, const char* page);
 
 int main(int argc, char** argv)
 {
@@ -81,7 +121,7 @@ int main(int argc, char** argv)
       //close(STDOUT_FILENO);
       close(server_socket);
 
-      //handle_connection(connection);
+      process_connection(connection);
 
       close(connection);
       return EXIT_SUCCESS;
@@ -106,4 +146,97 @@ void clean_up_child_process(int signal_number)
 {
   int status;
   wait(&status);
+}
+
+void process_connection(int connection_fd)
+{
+  fprintf(stdout, "Connection %d: Waiting data from client\n", connection_fd);
+
+  char buffer[256];
+  ssize_t bytes_read;
+
+  bytes_read = read(connection_fd, buffer, sizeof(buffer) - 3);
+  fprintf(stdout, "Rceived from client:\n");
+  fprintf(stdout, "%s", buffer);
+  if (bytes_read > 0)
+  {
+    char method[sizeof(buffer)];
+    char url[sizeof(buffer)];
+    char protocol[sizeof(buffer)];
+
+    buffer[bytes_read] = '\0';
+    sscanf(buffer, "%s %s %s", method, url, protocol); // Secure alert! Provided strings can be more than buffer size
+
+    while (strstr(buffer, "\r\n\r\n") == NULL)
+    {
+      char* pbuf = buffer;
+      if (bytes_read == 1)
+        pbuf++;
+      else if (bytes_read > 1)
+      {
+        *pbuf++ = buffer[bytes_read - 2];
+        *pbuf++ = buffer[bytes_read - 1];
+      }
+      bytes_read = read(connection_fd, pbuf, sizeof(buffer) - 3);
+      *(pbuf + bytes_read) = '\0';
+      fprintf(stdout, "%s", buffer);
+    }
+
+    if (bytes_read == -1) // Connection unexpectedly terminated
+    {
+      close(connection_fd);
+      return;
+    }
+
+    if (strcmp(protocol, "HTTP/1.0") && strcmp(protocol, "HTTP/1.1"))
+    {
+      write(connection_fd, bad_request_response, sizeof(bad_request_response));
+      fprintf(stdout, "Sended to client:\n");
+      fprintf(stdout, "%s", bad_request_response);
+    }
+    else if (strcmp(method, "GET"))
+    {
+      write(connection_fd, bad_method_response, sizeof(bad_method_response));
+      fprintf(stdout, "Sended to client:\n");
+      fprintf(stdout, "%s", bad_method_response);
+    }
+    else
+      process_get(connection_fd, url);
+  }
+  else if (bytes_read == 0) // Connection terminated without sending any data
+    // Nothing to do
+  ;
+
+  else // read() failed
+  {
+    fprintf(stderr, "Error in function \"read\": %s\n", strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+}
+
+void process_get(int connection_fd, const char* page)
+{
+  int bFound = 0;
+  // parse request here
+  if (*page == '/' && strchr(page + 1, '/') == NULL)
+  {
+    bFound = 1;
+  }
+
+  // if requested service not found
+  if (!bFound)
+  {
+    write(connection_fd, not_found_response, sizeof(not_found_response));
+    fprintf(stdout, "Sended to client:\n");
+    fprintf(stdout, "%s", not_found_response);
+  }
+  else // Correct request
+  {
+    write(connection_fd, ok_response, sizeof(ok_response));
+    fprintf(stdout, "Sended to client:\n");
+    fprintf(stdout, "%s", ok_response);
+
+    // process_catalog
+    // process_player
+  }
 }
