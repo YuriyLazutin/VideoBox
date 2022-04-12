@@ -10,6 +10,11 @@
 #define   SERVER_PORT             5810
 #define   SERVER_LISTEN_BACKLOG   32
 
+#define   TINY_BUFFER_SIZE        8
+#define   SMALL_BUFFER_SIZE       256
+#define   STANDARD_BUFFER_SIZE    4096
+#define   LARGE_BUFFER_SIZE       1048576
+
 static char* ok_response =
   "HTTP/1.0 200 OK\n"
   "Content-type: text/html\n"
@@ -50,8 +55,12 @@ static char* bad_method_response =
 
 // catch SIGCHLD
 void clean_up_child_process(int);
-void process_connection(int connection_fd);
-void process_get(int connection_fd, const char* page);
+void process_connection(int conn);
+void process_get(int conn, const char* page);
+ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
+char* skip_spaces(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit);
+char* read_word(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit);
+char* read_rnrn(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit);
 
 int main(int argc, char** argv)
 {
@@ -135,7 +144,6 @@ int main(int argc, char** argv)
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
       return EXIT_FAILURE;
     }
-
   }
 
   return EXIT_SUCCESS;
@@ -148,73 +156,48 @@ void clean_up_child_process(int signal_number)
   wait(&status);
 }
 
-void process_connection(int connection_fd)
+void process_connection(int conn)
 {
-  fprintf(stdout, "Connection %d: Waiting data from client\n", connection_fd);
-
-  char buffer[256];
+  char buffer[SMALL_BUFFER_SIZE];
   ssize_t bytes_read;
+  char* pos;
 
-  bytes_read = read(connection_fd, buffer, sizeof(buffer) - 3);
-  fprintf(stdout, "Rceived from client:\n");
-  fprintf(stdout, "%s", buffer);
-  if (bytes_read > 0)
+  char* method = NULL;
+  char* request = NULL;
+  char* protocol = NULL;
+
+  fprintf(stdout, "Connection %d: Rceived from client\n", conn);
+  bytes_read = read_block(conn, buffer, sizeof(buffer) - 3);
+
+  pos = buffer;
+
+  pos = skip_spaces(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 1000);
+  method = read_word(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 5);
+
+  if (!method || strcmp(method, "GET") && strcmp(method, "POST"))
   {
-    char method[sizeof(buffer)];
-    char url[sizeof(buffer)];
-    char protocol[sizeof(buffer)];
-
-    buffer[bytes_read] = '\0';
-    sscanf(buffer, "%s %s %s", method, url, protocol); // Secure alert! Provided strings can be more than buffer size
-
-    while (strstr(buffer, "\r\n\r\n") == NULL)
-    {
-      char* pbuf = buffer;
-      if (bytes_read == 1)
-        pbuf++;
-      else if (bytes_read > 1)
-      {
-        *pbuf++ = buffer[bytes_read - 2];
-        *pbuf++ = buffer[bytes_read - 1];
-      }
-      bytes_read = read(connection_fd, pbuf, sizeof(buffer) - 3);
-      *(pbuf + bytes_read) = '\0';
-      fprintf(stdout, "%s", buffer);
-    }
-
-    if (bytes_read == -1) // Connection unexpectedly terminated
-    {
-      close(connection_fd);
-      return;
-    }
-
-    if (strcmp(protocol, "HTTP/1.0") && strcmp(protocol, "HTTP/1.1"))
-    {
-      write(connection_fd, bad_request_response, sizeof(bad_request_response));
-      fprintf(stdout, "Sended to client:\n");
-      fprintf(stdout, "%s", bad_request_response);
-    }
-    else if (strcmp(method, "GET"))
-    {
-      write(connection_fd, bad_method_response, sizeof(bad_method_response));
-      fprintf(stdout, "Sended to client:\n");
-      fprintf(stdout, "%s", bad_method_response);
-    }
-    else
-      process_get(connection_fd, url);
+    write(conn, bad_method_response, sizeof(bad_method_response));
+    fprintf(stdout, "Sended to client:\n");
+    fprintf(stdout, "%s", bad_method_response);
   }
-  else if (bytes_read == 0) // Connection terminated without sending any data
-    // Nothing to do
-  ;
 
-  else // read() failed
+  pos = skip_spaces(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 1000);
+  request = read_word(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 32000);
+  pos = skip_spaces(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 1000);
+  protocol = read_word(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 9);
+  if (!protocol || strcmp(protocol, "HTTP/1.0") && strcmp(protocol, "HTTP/1.1"))
   {
-    fprintf(stderr, "Error in function \"read\": %s\n", strerror(errno));
-    exit(EXIT_FAILURE);
+    write(conn, bad_request_response, sizeof(bad_request_response));
+    fprintf(stdout, "Sended to client:\n");
+    fprintf(stdout, "%s", bad_request_response);
   }
+
+  pos = read_rnrn(conn, buffer, sizeof(buffer) - 3, pos, &bytes_read, 32000);
+
+  process_get(conn, request);
 }
 
-void process_get(int connection_fd, const char* page)
+void process_get(int conn, const char* page)
 {
   int bFound = 0;
   // parse request here
@@ -226,17 +209,142 @@ void process_get(int connection_fd, const char* page)
   // if requested service not found
   if (!bFound)
   {
-    write(connection_fd, not_found_response, sizeof(not_found_response));
+    write(conn, not_found_response, sizeof(not_found_response));
     fprintf(stdout, "Sended to client:\n");
     fprintf(stdout, "%s", not_found_response);
   }
   else // Correct request
   {
-    write(connection_fd, ok_response, sizeof(ok_response));
+    write(conn, ok_response, sizeof(ok_response));
     fprintf(stdout, "Sended to client:\n");
     fprintf(stdout, "%s", ok_response);
 
     // process_catalog
     // process_player
   }
+}
+
+ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
+{
+  ssize_t bytes_read;
+  bytes_read = read(conn, buf, buf_size);
+  if (bytes_read > 0)
+  {
+    *(buf + bytes_read) = '\0';
+    fprintf(stdout, "%s", buf);
+  }
+  else if (bytes_read == 0)
+  {
+    close(conn);
+    fprintf(stdout, "Connection %d terminated without sending any data\n", conn);
+    exit(EXIT_SUCCESS);
+
+  }
+  else // (bytes_read == -1)
+  {
+    close(conn);
+    fprintf(stderr, "Error in function \"read\": %s\n", strerror(errno));
+    fprintf(stderr, "Connection %d unexpectedly terminated\n", conn);
+    exit(EXIT_FAILURE);
+  }
+  return bytes_read;
+}
+
+char* skip_spaces(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit)
+{
+  ssize_t cnt, total_cnt = 0;
+
+  while (*pos == ' ')
+  {
+    cnt = 1;
+
+    while (*(++pos) == ' ' && ++cnt < *bytes_read);
+
+    total_cnt += cnt;
+
+    if (total_cnt > read_limit)
+    {
+      fprintf(stderr, "Connection %d: limit exceeded while skip spaces\n", conn);
+      exit(EXIT_FAILURE);
+    }
+
+    if (cnt == *bytes_read)
+    {
+      *bytes_read = read_block(conn, buf, buf_size);
+      pos = buf;
+    }
+    else
+      *bytes_read -= cnt;
+  }
+  return pos;
+}
+
+char* read_word(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit)
+{
+  char* result = NULL;
+  ssize_t word_len = 0, cnt;
+
+  while (*pos != ' ' && *pos != '\r' && *pos != '\n')
+  {
+    cnt = 1;
+    do pos++;
+    while (*pos != ' ' && *pos != '\r' && *pos != '\n' && ++cnt < *bytes_read);
+
+    word_len += cnt;
+
+    if (word_len + 1 > read_limit)
+    {
+      if (result)
+        free(result);
+      fprintf(stderr, "Connection %d: limit exceeded while read_word\n", conn);
+      exit(EXIT_FAILURE);
+    }
+
+    result = realloc(result, word_len + 1);
+    memcpy(result + word_len - cnt, pos - cnt, cnt);
+
+    if (cnt == *bytes_read)
+    {
+      *bytes_read = read_block(conn, buf, buf_size);
+      pos = buf;
+    }
+    else
+      *bytes_read -= cnt;
+  }
+
+  if (result)
+    *(result + word_len) = '\0';
+  return result;
+}
+
+char* read_rnrn(const int conn, char* buf, const ssize_t buf_size, char* pos, ssize_t* bytes_read, const ssize_t read_limit)
+{
+  ssize_t total_read = *bytes_read;
+
+  while (strstr(pos, "\r\n\r\n") == NULL)
+  {
+    if (total_read > read_limit)
+    {
+      fprintf(stderr, "Connection %d: limit exceeded while reading RNRN\n", conn);
+      exit(EXIT_FAILURE);
+    }
+
+    if (*bytes_read == 1)
+    {
+      *buf = *pos;
+      pos = buf + 1;
+    }
+    else if (*bytes_read > 1)
+    {
+      *buf = *(pos + *bytes_read - 2);
+      *(buf + 1) = *(pos + *bytes_read - 1);
+      pos = buf + 2;
+    }
+
+    *bytes_read = read_block(conn, pos, buf_size);
+    total_read += *bytes_read;
+    pos = buf;
+  }
+
+  return pos;
 }
