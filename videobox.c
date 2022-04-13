@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include "player.h"
 
 #define   SERVER_PORT             5810
 #define   SERVER_LISTEN_BACKLOG   32
@@ -32,6 +33,7 @@ void send_ok(const int conn);
 void send_bad_request(const int conn);
 void send_not_found(const int conn);
 void send_bad_method(const int conn);
+int service_detect(const char* service_token, char** pos);
 
 int main(int argc, char** argv)
 {
@@ -210,25 +212,22 @@ int process_connection(int conn)
 
 int process_get(int conn, const char* page)
 {
-  int bFound = 0;
-  // parse request here
-  if (*page == '/' && strchr(page + 1, '/') == NULL)
-  {
-    bFound = 1;
-  }
+  int rc = EXIT_SUCCESS;
 
-  // if requested service not found
-  if (!bFound)
-  {
-    send_not_found(conn);
-  }
-  else // Correct request
+  if (service_detect("/play?v=", &page)) // process_player
   {
     send_ok(conn);
-
-    // process_catalog
-    // process_player
+    rc = player_show(conn, page);
   }
+  else if (*page == '/' && *(page + 1) == '\0') // process_catalog
+  {
+    send_ok(conn);
+    //rc = catalog_show(conn, page);
+  }
+  else
+    send_not_found(conn);
+
+  return rc;
 }
 
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
@@ -412,4 +411,23 @@ void send_bad_method(const int conn)
   write(conn, bad_method_response, strlen(bad_method_response));
   fprintf(stdout, "Sended to client:\n");
   fprintf(stdout, "%s", bad_method_response);
+}
+
+int service_detect(const char* service_token, char** pos)
+{
+  char* it = *pos;
+
+  while (*service_token == *it && *service_token != '\0')
+  {
+    service_token++;
+    it++;
+  }
+
+  if (*service_token == '\0')
+  {
+    *pos = it;
+    return 1;
+  }
+
+  return 0;
 }
