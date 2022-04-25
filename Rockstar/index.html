@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset=utf-8> <!-- Кодировка должна быть указана в первых 512 байтах документа. Возможна уязвимость, если этого не сделать! -->
+    <meta http-equiv="content-type" content="text/html">
+    <meta name="author" content="Yuriy Lazutin" >
+    <meta name="description" content="Video hosting portal">
+    <meta name="keywords" content="Yuriy Lazutin, Лазутин Юрий, VideoBox">
+
+    <title>VideoBox</title>
+
+    <style>
+      body {
+             margin: 0;
+             padding: 0;
+           }
+
+      #lframe {
+                width: 80%;
+                height: 100%;
+                position: absolute;
+              }
+
+      #rframe {
+                width: 20%;
+                height: 100%;
+                position: absolute;
+              }
+
+      #splitter {
+                  background-color: black;
+                  width: 1px;
+                  height: 100%;
+                  position: absolute;
+                  cursor: w-resize;
+                }
+    </style>
+  </head>
+
+  <body onload="init()">
+    <iframe src="http://109.197.125.82:80" name="lframe" id="lframe" title="Video Box Player" style="border: 0;">Video Box Player</iframe>
+    <script>
+      var lframe;
+      lframe = document.getElementById('lframe');
+      lframe.src += location.search;
+    </script>
+    <div id="splitter"></div>
+    <div id="rframe"> <H1>Right frame</H1> </div>
+  </body>
+</html>
+
+<script type="text/javascript" language="JavaScript">
+var splitter, lframe, rframe;
+
+function init()
+{
+  lframe = document.getElementById("lframe");
+  splitter = document.getElementById("splitter");
+  rframe = document.getElementById("rframe");
+
+  splitter.style.marginLeft = lframe.clientWidth + "px";
+  rframe.style.marginLeft = lframe.clientWidth + splitter.clientWidth + "px";
+
+  splitter.addEventListener("mousedown", spMouseDown);
+}
+
+function spMouseDown(e)
+{
+  lframe.style.pointerEvents = "none";
+  splitter.removeEventListener("mousedown", spMouseDown);
+  window.addEventListener("mousemove", spMouseMove);
+  window.addEventListener("mouseup", spMouseUp);
+}
+
+function spMouseUp(e)
+{
+  lframe.style.width = e.clientX + "px";
+  splitter.style.marginLeft = e.clientX + "px";
+  rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
+
+  lframe.style.pointerEvents = "auto";
+
+  window.removeEventListener("mousemove", spMouseMove);
+  window.removeEventListener("mouseup", spMouseUp);
+  splitter.addEventListener("mousedown", spMouseDown);
+}
+
+function spMouseMove(e)
+{
+  lframe.style.width = e.clientX + "px";
+  splitter.style.marginLeft = e.clientX + "px";
+  rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
+}
+</script>
