@@ -7,6 +7,8 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include "player.h"
+#include "pump.h"
+#include "showboard.h"
 
 #define   SERVER_PORT             5810
 #define   SERVER_LISTEN_BACKLOG   32
@@ -33,7 +35,7 @@ void send_ok(const int conn);
 void send_bad_request(const int conn);
 void send_not_found(const int conn);
 void send_bad_method(const int conn);
-int service_detect(const char* service_token, char** pos);
+int service_detect(const char* service_token, const char** pos);
 
 int main(int argc, char** argv)
 {
@@ -213,16 +215,23 @@ int process_connection(int conn)
 int process_get(int conn, const char* page)
 {
   int rc = EXIT_SUCCESS;
+  char* pstr;
 
-  if (service_detect("/play?v=", &page)) // process_player
+  if (service_detect("play=", &page)) // process_player
   {
     send_ok(conn);
     rc = player_show(conn, page);
   }
+  else if ((pstr = strstr(page, "pump="))) // process_pump
+  {
+    send_ok(conn);
+    rc = pump(conn, page);
+  }
   else if (*page == '/' && *(page + 1) == '\0') // process_catalog
   {
     send_ok(conn);
-    //rc = catalog_show(conn, page);
+    rc = showboard(conn, page);
+
   }
   else
     send_not_found(conn);
@@ -413,9 +422,9 @@ void send_bad_method(const int conn)
   fprintf(stdout, "%s", bad_method_response);
 }
 
-int service_detect(const char* service_token, char** pos)
+int service_detect(const char* service_token, const char** pos)
 {
-  char* it = *pos;
+  const char* it = *pos;
 
   while (*service_token == *it && *service_token != '\0')
   {

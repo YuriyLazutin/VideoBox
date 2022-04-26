@@ -1,6 +1,6 @@
 #include "player.h"
 
-char* page =
+static char* page =
 "<!doctype html>\n"
 "<html lang=en>\n"
 "\n"

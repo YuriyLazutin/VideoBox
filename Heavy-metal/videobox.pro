@@ -5,9 +5,13 @@ CONFIG -= qt
 
 SOURCES += \
         player.c \
+        pump.c \
+        showboard.c \
         videobox.c
 
 HEADERS += \
-    player.h
+    player.h \
+    pump.h \
+    showboard.h
 
 TARGET = videobox
