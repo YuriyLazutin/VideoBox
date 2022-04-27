@@ -10,6 +10,7 @@ SOURCES += \
         videobox.c
 
 HEADERS += \
+    defines.h \
     player.h \
     pump.h \
     showboard.h

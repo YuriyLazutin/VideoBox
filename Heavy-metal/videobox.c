@@ -6,22 +6,11 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <linux/limits.h>
+#include "defines.h"
 #include "player.h"
 #include "pump.h"
 #include "showboard.h"
-
-#define   SERVER_PORT             5810
-#define   SERVER_LISTEN_BACKLOG   32
-
-#define   TINY_BUFFER_SIZE        8
-#define   SMALL_BUFFER_SIZE       256
-#define   STANDARD_BUFFER_SIZE    4096
-#define   LARGE_BUFFER_SIZE       1048576
-
-#define   NO_ERRORS              0
-#define   BAD_REQUEST            1
-#define   BAD_METHOD             2
-#define   NOT_FOUND              3
 
 // catch SIGCHLD
 void clean_up_child_process(int);
@@ -33,9 +22,10 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 int read_rnrn(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 void send_ok(const int conn);
 void send_bad_request(const int conn);
-void send_not_found(const int conn);
 void send_bad_method(const int conn);
 int service_detect(const char* service_token, const char** pos);
+char* server_dir;
+char* get_self_executable_directory();
 
 int main(int argc, char** argv)
 {
@@ -77,6 +67,8 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
+  server_dir = get_self_executable_directory();
+
   // Process connections
   while (1)
   {
@@ -90,6 +82,8 @@ int main(int argc, char** argv)
       else // Something wrong
       {
         fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errno));
+        if (server_dir)
+          free(server_dir);
         return EXIT_FAILURE;
       }
     }
@@ -117,10 +111,14 @@ int main(int argc, char** argv)
     else // fork() failed
     {
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
+      if (server_dir)
+        free(server_dir);
       return EXIT_FAILURE;
     }
   }
 
+  if (server_dir)
+    free(server_dir);
   return EXIT_SUCCESS;
 }
 
@@ -202,7 +200,10 @@ int process_connection(int conn)
       send_bad_method(conn);
       break;
     case NOT_FOUND:
-      send_not_found(conn);;
+      {
+        send_ok(conn);
+        int rc = showboard(conn, "Not Found");
+      }
       break;
   }
 
@@ -231,10 +232,12 @@ int process_get(int conn, const char* page)
   {
     send_ok(conn);
     rc = showboard(conn, page);
-
   }
   else
-    send_not_found(conn);
+  {
+    send_ok(conn);
+    rc = showboard(conn, page);
+  }
 
   return rc;
 }
@@ -387,23 +390,7 @@ void send_bad_request(const int conn)
   fprintf(stdout, "Sended to client:\n");
   fprintf(stdout, "%s", bad_request_response);
 }
-void send_not_found(const int conn)
-{
-  char* not_found_response =
-    "HTTP/1.0 404 Not Found\n"
-    "Content-type: text/html\n"
-    "\n"
-    "<html>\n"
-    " <body>\n"
-    "  <h1>Not Found</h1>\n"
-    "  <p>The requested URL was not found.</p>\n"
-    " </body>\n"
-    "</html>\n";
 
-  write(conn, not_found_response, strlen(not_found_response));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", not_found_response);
-}
 void send_bad_method(const int conn)
 {
   char* bad_method_response =
@@ -439,4 +426,21 @@ int service_detect(const char* service_token, const char** pos)
   }
 
   return 0;
+}
+
+char* get_self_executable_directory()
+{
+  int rc;
+  char link_target[PATH_MAX];
+
+  // Read symlink /proc/self/exe
+  rc = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
+  if (rc == -1)
+    return NULL;
+
+  // Remove file name
+  while (rc > 0 && link_target[rc] != '/')
+    link_target[rc--] = '\0';
+
+  return strndup(link_target, PATH_MAX);
 }
