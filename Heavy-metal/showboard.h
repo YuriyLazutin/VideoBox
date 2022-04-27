@@ -6,6 +6,13 @@
 #include <unistd.h>
 #include <string.h>
 
+//#include <assert.h>
+#include <dirent.h> // DIR, struct dirent, PATH_MAX
+#include <sys/stat.h>
+//#include <sys/types.h>
+
+extern char* server_dir;
+
 int showboard(int conn, const char* params);
 
 #endif // SHOWBOARD_H

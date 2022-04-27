@@ -49,7 +49,7 @@ content of mp4...
 int pump(int conn, const char* params)
 {
   int rc = EXIT_SUCCESS, rc2;
-  size_t length = strlen(params);
+  ssize_t length = strlen(params);
 
   char *index, *sig, *ext, *mime_type, *file_name;
 
@@ -85,6 +85,9 @@ int pump(int conn, const char* params)
     }
   }
 
+  if (ext == NULL || mime_type == NULL)
+    rc = EXIT_FAILURE;
+
   if (rc == EXIT_SUCCESS)
   {
     sig = strndup(params + INDEX_SIZE, SIG_SIZE);
@@ -97,6 +100,8 @@ int pump(int conn, const char* params)
     length = strlen(server_dir) + 1 + strlen(sig) + 1 + 5 + strlen(ext);
     file_name = (char*)malloc( (length+1)*sizeof(char) );
     rc2 = snprintf(file_name, length + 1, "%s/%s/%4s.%s", server_dir, sig, index + FLAGS_SIZE, ext);
+    if (rc2 < 0 || rc2 >= length + 1)
+      rc = EXIT_FAILURE;
   }
 
   int read_fd;
@@ -119,15 +124,22 @@ int pump(int conn, const char* params)
     length = sizeof(buf);
 
     length = snprintf(buf, sizeof(buf), "%s%s", "HTTP/1.1 200 OK\n", "Accept-Ranges: bytes\n");
+    if (length < 0 || length >= sizeof(buf))
+      rc = EXIT_FAILURE;
+
     write(conn, buf, length);
     fprintf(stdout, "Sended to client:\n");
     fprintf(stdout, "%s", buf);
 
-    length = snprintf(buf, sizeof(buf), "Content-Length: lu\n", file_info.st_size);
+    length = snprintf(buf, sizeof(buf), "Content-Length: %lu\n", file_info.st_size);
+    if (length < 0 || length >= sizeof(buf))
+      rc = EXIT_FAILURE;
     write(conn, buf, length);
     fprintf(stdout, "%s", buf);
 
     length = snprintf(buf, sizeof(buf), "Content-Type: %s\n\n", "video/mp4");
+    if (length < 0 || length >= sizeof(buf))
+      rc = EXIT_FAILURE;
     write(conn, buf, length);
     fprintf(stdout, "%s", buf);
 

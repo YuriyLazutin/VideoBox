@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <linux/limits.h>
+//#include <linux/limits.h> // PATH_MAX
 #include "defines.h"
 #include "player.h"
 #include "pump.h"
@@ -27,7 +27,7 @@ int service_detect(const char* service_token, const char** pos);
 char* server_dir;
 char* get_self_executable_directory();
 
-int main(int argc, char** argv)
+int main()
 {
   struct sockaddr_in server_address;
   struct sockaddr_in remote_address;
