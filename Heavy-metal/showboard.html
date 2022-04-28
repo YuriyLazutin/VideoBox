@@ -14,6 +14,9 @@
       height: 100%;
       margin: 0;
       padding: 0;
+      background-color: rgb(160, 200, 210);
+      background: radial-gradient(at 50% 50% , rgb(190, 200, 210), rgb(160, 200, 210));
+      color: rgb(72, 41, 40);
     }
 
     header {
@@ -23,6 +26,9 @@
       position: fixed;
       top: 0px;
       z-index: 1;
+      background-color: rgb(130, 170, 180);
+      background: radial-gradient(at 50% 50% , rgb(160, 170, 180), rgb(130, 170, 180));
+      color: #233D23;
       /*
       text-align: center;
       white-space: nowrap;
@@ -32,14 +38,13 @@
     .cont1 {
       width: 70%;
       height: 100%;
-      background-color:
-      rgb(205, 205, 0);
       display: flex;
       align-items: center;
       justify-content: center;
       margin-left: auto;
       margin-right: auto;
       /*
+      background-color: rgb(205, 205, 0);
       */
     }
 
@@ -50,15 +55,17 @@
 
     .cont2 {
       height: 100%;
-      background-color: rgb(0, 205, 205);
       display: block;
       position: relative;
+      /*
+      background-color: rgb(0, 205, 205);
+      */
     }
 
     H1 {
       font-weight: bold;
       font-style: italic;
-      font-size: calc(10px + 0.75vw);
+      font-size: calc(10px + 1.5vw);
       text-align: center;
       margin-left: 3%;
       margin-right: 3%;
@@ -74,8 +81,9 @@
       text-align: center;
       white-space: nowrap;
       position: absolute;
-      top: 70%;
+      top: 50%;
       margin-left: 50%;
+      margin-top: 15%;
       transform: translate(-50%, -50%);
 
       /*
@@ -90,8 +98,10 @@
       min-height: 48px;
       position: fixed;
       top: 95%;
-      background-color: rgb(200, 0, 0);
       z-index: 1;
+      /*
+      background-color: rgb(200, 0, 0);
+      */
     }
 
     .board {
@@ -106,6 +116,7 @@
       bottom: 5%;
 
 /*
+  background-color: rgb(0, 105, 200);
   min-height: 70%;
   margin-left: 20%;
   margin-right: 20%;
@@ -113,7 +124,6 @@
   font-size: calc(8px + 0.75vw);
   text-shadow: 0 0 1em rgb(255, 255, 0);
 */
-  background-color: rgb(0, 105, 200);
 }
 
 
@@ -122,7 +132,6 @@
   display: block;
   position: relative;
   float: left;
-  background-color: rgb(105, 105, 190);
   width: 18%;
   height: 25%;
   min-width: 240px;
@@ -132,6 +141,7 @@
   margin-top: 0.5%;
   margin-bottom: 0.5%;
 /*
+  background-color: rgb(105, 105, 190);
   max-width: 18%;
   max-width: 90%;
   max-height: 80%;
@@ -143,9 +153,9 @@
 .trumb {
   width: 100%;
   height: 80%;
-  background-color: rgb(0, 105, 0);
-
+  box-shadow: 3px 3px 5px 5px rgba(0,0,0,0.5);
 /*
+  background-color: rgb(0, 105, 0);
   position: relative;
   margin-right: auto;
   margin-left: auto;
@@ -189,7 +199,7 @@ a {
       <div class="cont1">
         <img src="pics/logo.png" class="logo"></img>
         <div class="cont2">
-          <H1>Videobox Showboard</H1>
+          <H1>Videobox</H1>
           <font class="rectext">We recommend you:</font>
         </div>
       </div>
