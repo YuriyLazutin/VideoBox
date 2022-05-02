@@ -3,7 +3,7 @@
 
 #define   SERVER_PORT             5810
 #define   SERVER_LISTEN_BACKLOG   32
-#define   INDEX_SIZE              8
+#define   ID_SIZE                 4
 #define   FLAGS_SIZE              4
 #define   SIG_SIZE                32
 

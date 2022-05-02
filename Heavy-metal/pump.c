@@ -51,34 +51,47 @@ int pump(int conn, const char* params)
   int rc = EXIT_SUCCESS, rc2;
   ssize_t length = strlen(params);
 
-  char *index, *sig, *ext, *mime_type, *file_name;
+  char *idx, *sig, *ext, *mime_type, *file_name;
 
-  if (length < INDEX_SIZE + SIG_SIZE)
+  if (length < SIG_SIZE + ID_SIZE + FLAGS_SIZE)
     rc = EXIT_FAILURE;
 
   if (rc == EXIT_SUCCESS)
   {
-    index = strndup(params, INDEX_SIZE);
-    if (index == NULL)
+    idx = strndup(params, ID_SIZE + FLAGS_SIZE);
+    if (idx == NULL)
       rc = EXIT_FAILURE;
 
-    switch (index[0])
+    switch (idx[ID_SIZE])
     {
-      case 'a':
-        ext = strdup("mp4");
-        mime_type = strdup("video/mp4");
+      case 'f':
+        if (idx[ID_SIZE + 1] == '4')
+        {
+          ext = strdup("mp4");
+          mime_type = strdup("video/mp4");
+        }
+        else if (idx[ID_SIZE + 1] == 'w')
+        {
+          ext = strdup("webm");
+          mime_type = strdup("video/webm");
+        }
         break;
-      case 'b':
-        ext = strdup("webm");
-        mime_type = strdup("video/webm");
-        break;
-      case 'c':
-        ext = strdup("png");
-        mime_type = strdup("image/png");
-        break;
-      case 'd':
-        ext = strdup("webp");
-        mime_type = strdup("image/webp");
+      case 'p':
+        if (idx[ID_SIZE + 1] == 'p')
+        {
+          ext = strdup("png");
+          mime_type = strdup("image/png");
+        }
+        else if (idx[ID_SIZE + 1] == 'j')
+        {
+          ext = strdup("jpg");
+          mime_type = strdup("image/jpeg");
+        }
+        else if (idx[ID_SIZE + 1] == 'w')
+        {
+          ext = strdup("webp");
+          mime_type = strdup("image/webp");
+        }
         break;
       default:
         rc = EXIT_FAILURE;
@@ -90,7 +103,7 @@ int pump(int conn, const char* params)
 
   if (rc == EXIT_SUCCESS)
   {
-    sig = strndup(params + INDEX_SIZE, SIG_SIZE);
+    sig = strndup(params + SIG_SIZE, SIG_SIZE);
     if (sig == NULL)
       rc = EXIT_FAILURE;
   }
@@ -99,7 +112,7 @@ int pump(int conn, const char* params)
   {
     length = strlen(server_dir) + 1 + strlen(sig) + 1 + 5 + strlen(ext);
     file_name = (char*)malloc( (length+1)*sizeof(char) );
-    rc2 = snprintf(file_name, length + 1, "%s/%s/%4s.%s", server_dir, sig, index + FLAGS_SIZE, ext);
+    rc2 = snprintf(file_name, length + 1, "%s/%s/%4s.%s", server_dir, sig, idx + FLAGS_SIZE, ext);
     if (rc2 < 0 || rc2 >= length + 1)
       rc = EXIT_FAILURE;
   }
@@ -157,8 +170,8 @@ int pump(int conn, const char* params)
   }
 
   close(read_fd);
-  if (index)
-    free(index);
+  if (idx)
+    free(idx);
   if (sig)
     free(sig);
   if (file_name)

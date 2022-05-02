@@ -19,7 +19,7 @@ int process_get(int conn, const char* page);
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
-int read_rnrn(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
+int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 void send_ok(const int conn);
 void send_bad_request(const int conn);
 void send_bad_method(const int conn);
@@ -137,7 +137,7 @@ int process_connection(int conn)
 
   char* method = NULL;
   char* request = NULL;
-  char* protocol = NULL;
+  // char* protocol = NULL; // Disable this, because we can serve without this information
   int iError = NO_ERRORS;
 
   fprintf(stdout, "Connection %d: Received from client\n", conn);
@@ -165,8 +165,8 @@ int process_connection(int conn)
     if (!request)
       iError = BAD_REQUEST;
   }
-
-  if (iError == NO_ERRORS)
+// Disable this, because we can serve without this information
+/*  if (iError == NO_ERRORS)
     iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
 
   if (iError == NO_ERRORS)
@@ -175,9 +175,10 @@ int process_connection(int conn)
     if ( !protocol || !(strcmp(protocol, "HTTP/1.0") == 0 || strcmp(protocol, "HTTP/1.1") == 0) )
       iError = BAD_REQUEST;
   }
-
+*/
+// End of: Disable this, because we can serve without this information
   if (iError == NO_ERRORS)
-    iError = read_rnrn(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+    iError = read_str(conn, "\r\n\r\n", buffer, sizeof(buffer), &pos, &bytes_read, 32000);
 
   if (iError == NO_ERRORS)
     process_get(conn, request);
@@ -186,8 +187,9 @@ int process_connection(int conn)
     free(method);
   if (request)
     free(request);
-  if (protocol)
-    free(protocol);
+   // Disable this, because we can serve without this information
+  /*if (protocol)
+    free(protocol);*/
 
   switch (iError)
   {
@@ -330,17 +332,20 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   return result;
 }
 
-int read_rnrn(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
+int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
 {
   ssize_t total_read = *bytes_read;
-  int i = 0, n = strlen("\r\n\r\n");
+  int i = 0, n = strlen(str);
   char* pstr;
 
-  while ((pstr = strstr(*pos, "\r\n\r\n")) == NULL)
+  if (n > buf_size - 1)
+    return BAD_REQUEST;
+
+  while ((pstr = strstr(*pos, str)) == NULL)
   {
     if (total_read > read_limit)
     {
-      fprintf(stderr, "Connection %d: limit exceeded while reading RNRN\n", conn);
+      fprintf(stderr, "Connection %d: limit exceeded while reading string\n", conn);
       *bytes_read = 0;
       return BAD_REQUEST;
     }
@@ -368,6 +373,7 @@ void send_ok(const int conn)
     "Content-type: text/html\n"
     "\n";
 
+  size_t oksz = strlen(ok_response);
   write(conn, ok_response, strlen(ok_response));
   fprintf(stdout, "Sended to client:\n");
   fprintf(stdout, "%s", ok_response);
@@ -433,7 +439,7 @@ char* get_self_executable_directory()
   int rc;
   char link_target[PATH_MAX];
 
-  // Read symlink /proc/self/exe
+  // Read symlink /proc/self/exe (readlink does not insert NUL into buf)
   rc = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
   if (rc == -1)
     return NULL;
