@@ -25,10 +25,30 @@ void send_bad_request(const int conn);
 void send_bad_method(const int conn);
 int service_detect(const char* service_token, const char** pos);
 char* server_dir;
-char* get_self_executable_directory();
+ssize_t server_dir_length;
+char* showboard_dir;
+ssize_t showboard_dir_length;
+char* get_self_executable_directory(ssize_t* length);
+char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght);
 
 int main()
 {
+  server_dir = get_self_executable_directory(&server_dir_length);
+  if (server_dir_length <= 0)
+  {
+    fprintf(stderr, "Error in function \"get_self_executable_directory\": server_dir_length <= 0\n");
+    return EXIT_FAILURE;
+  }
+
+  showboard_dir = get_showboard_directory(&showboard_dir_length, server_dir, server_dir_length);
+  if (showboard_dir_length <= 0)
+  {
+    fprintf(stderr, "Error in function \"get_showboard_directory\": showboard_dir_length <= 0\n");
+    if (server_dir)
+      free(server_dir);
+    return EXIT_FAILURE;
+  }
+
   struct sockaddr_in server_address;
   struct sockaddr_in remote_address;
   socklen_t address_length = sizeof(server_address);
@@ -67,8 +87,6 @@ int main()
     return EXIT_FAILURE;
   }
 
-  server_dir = get_self_executable_directory();
-
   // Process connections
   while (1)
   {
@@ -84,6 +102,8 @@ int main()
         fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errno));
         if (server_dir)
           free(server_dir);
+        if (showboard_dir)
+          free(showboard_dir);
         return EXIT_FAILURE;
       }
     }
@@ -113,12 +133,16 @@ int main()
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
       if (server_dir)
         free(server_dir);
+      if (showboard_dir)
+        free(showboard_dir);
       return EXIT_FAILURE;
     }
   }
 
   if (server_dir)
     free(server_dir);
+  if (showboard_dir)
+    free(showboard_dir);
   return EXIT_SUCCESS;
 }
 
@@ -230,16 +254,8 @@ int process_get(int conn, const char* page)
     send_ok(conn);
     rc = pump(conn, page);
   }
-  else if (*page == '/' && *(page + 1) == '\0') // process_catalog
-  {
-    send_ok(conn);
-    rc = showboard(conn, page);
-  }
   else
-  {
-    send_ok(conn);
     rc = showboard(conn, page);
-  }
 
   return rc;
 }
@@ -434,19 +450,38 @@ int service_detect(const char* service_token, const char** pos)
   return 0;
 }
 
-char* get_self_executable_directory()
+char* get_self_executable_directory(ssize_t* length)
 {
-  int rc;
   char link_target[PATH_MAX];
 
   // Read symlink /proc/self/exe (readlink does not insert NUL into buf)
-  rc = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
-  if (rc == -1)
+  *length = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
+  if (*length == -1)
     return NULL;
 
   // Remove file name
-  while (rc > 0 && link_target[rc] != '/')
-    link_target[rc--] = '\0';
+  while (*length > 0 && link_target[*length] != '/')
+    link_target[(*length)--] = '\0';
+
+  (*length)++;
 
   return strndup(link_target, PATH_MAX);
+}
+
+char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
+{
+  char* result;
+  ssize_t dir_length = strlen("showboard/");
+
+  if (bse_lenght + dir_length + 1 > PATH_MAX)
+  {
+    *length = -1;
+    return NULL;
+  }
+
+  *length = bse_lenght + dir_length;
+  result = malloc(*length + 1);
+  memcpy(result, bse, bse_lenght); // Without NUL
+  memcpy(result + bse_lenght, "showboard/", dir_length + 1); // Including NUL
+  return result;
 }

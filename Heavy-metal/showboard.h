@@ -13,7 +13,8 @@
 //#include <sys/types.h>
 #include "defines.h"
 
-extern char* server_dir;
+extern char* showboard_dir;
+extern ssize_t showboard_dir_length;
 
 int showboard(int conn, const char* params);
 
