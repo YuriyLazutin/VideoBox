@@ -46,123 +46,146 @@ Content-Type: video/mp4
 content of mp4...
 */
 
+static char* head_template =
+"HTTP/1.1 200 OK\n"
+"Accept-Ranges: bytes\n"
+"Content-Length: %lu\n"
+"Content-Type: %s\n"
+"\n";
+
 int pump(int conn, const char* params)
 {
   int rc = EXIT_SUCCESS, rc2;
-  ssize_t length = strlen(params);
 
-  char *idx, *sig, *ext, *mime_type, *file_name;
+  char* ppar = strstr(params, "?pump=") + strlen("?pump=");
+  ssize_t length = strlen(ppar);
+
+  char *flags, *file_name, *mime_type;
 
   if (length < SIG_SIZE + ID_SIZE + FLAGS_SIZE)
     rc = EXIT_FAILURE;
 
   if (rc == EXIT_SUCCESS)
   {
-    idx = strndup(params, ID_SIZE + FLAGS_SIZE);
-    if (idx == NULL)
+    flags = strndup(ppar + SIG_SIZE + ID_SIZE, FLAGS_SIZE);
+    if (flags == NULL)
       rc = EXIT_FAILURE;
+  }
 
-    switch (idx[ID_SIZE])
+  if (rc == EXIT_SUCCESS)
+  {
+    switch (flags[0])
     {
       case 'f':
-        if (idx[ID_SIZE + 1] == '4')
+        if (flags[1] == '4')
         {
-          ext = strdup("mp4");
+          file_name = strdup("video.mp4");
           mime_type = strdup("video/mp4");
         }
-        else if (idx[ID_SIZE + 1] == 'w')
+        else if (flags[1] == 'w')
         {
-          ext = strdup("webm");
+          file_name = strdup("video.webm");
           mime_type = strdup("video/webm");
         }
         break;
       case 'p':
-        if (idx[ID_SIZE + 1] == 'p')
+        if (flags[1] == 'p')
         {
-          ext = strdup("png");
+          file_name = strdup("trumb.png");
           mime_type = strdup("image/png");
         }
-        else if (idx[ID_SIZE + 1] == 'j')
+        else if (flags[1] == 'j')
         {
-          ext = strdup("jpg");
+          file_name = strdup("trumb.jpg");
           mime_type = strdup("image/jpeg");
         }
-        else if (idx[ID_SIZE + 1] == 'w')
+        else if (flags[1] == 'w')
         {
-          ext = strdup("webp");
+          file_name = strdup("trumb.webp");
           mime_type = strdup("image/webp");
         }
         break;
       default:
         rc = EXIT_FAILURE;
     }
+    if (file_name == NULL || mime_type == NULL)
+      rc = EXIT_FAILURE;
+
   }
 
-  if (ext == NULL || mime_type == NULL)
-    rc = EXIT_FAILURE;
+
+  char *sig, *id;
+  if (rc == EXIT_SUCCESS)
+  {
+    sig = strndup(ppar, SIG_SIZE);
+    id = strndup(ppar + SIG_SIZE, ID_SIZE);
+    if (sig == NULL || id == NULL)
+      rc = EXIT_FAILURE;
+  }
+
+  char *file_path;
+  if (rc == EXIT_SUCCESS)
+  {
+    length = strlen(showboard_dir) + SIG_SIZE + 1 + ID_SIZE + 1 + strlen(file_name) + 1;
+    if (length >= PATH_MAX)
+        rc = EXIT_FAILURE;
+  }
 
   if (rc == EXIT_SUCCESS)
   {
-    sig = strndup(params + SIG_SIZE, SIG_SIZE);
-    if (sig == NULL)
+    file_path = malloc(length);
+    if (!file_path)
       rc = EXIT_FAILURE;
   }
 
   if (rc == EXIT_SUCCESS)
   {
-    length = strlen(server_dir) + 1 + strlen(sig) + 1 + 5 + strlen(ext);
-    file_name = (char*)malloc( (length+1)*sizeof(char) );
-    rc2 = snprintf(file_name, length + 1, "%s/%s/%4s.%s", server_dir, sig, idx + FLAGS_SIZE, ext);
-    if (rc2 < 0 || rc2 >= length + 1)
+    rc2 = snprintf(file_path, length, "%s%s/%s/%s", showboard_dir, sig, id, file_name);
+    if (rc2 < 0 || rc2 >= length)
       rc = EXIT_FAILURE;
   }
 
   int read_fd;
   struct stat file_info;
 
-  read_fd = open(file_name, O_RDONLY);
-  if (read_fd == -1)
-    rc = EXIT_FAILURE;
-
   if (rc == EXIT_SUCCESS)
   {
-    rc2 = fstat(read_fd, &file_info);
-    if (rc2 == -1) // не удалось открыть файл или прочитать данные из него
+    read_fd = open(file_path, O_RDONLY);
+    if (read_fd == -1)
       rc = EXIT_FAILURE;
   }
 
   if (rc == EXIT_SUCCESS)
   {
-    char buf[256];
-    length = sizeof(buf);
-
-    length = snprintf(buf, sizeof(buf), "%s%s", "HTTP/1.1 200 OK\n", "Accept-Ranges: bytes\n");
-    if (length < 0 || length >= sizeof(buf))
+    rc2 = fstat(read_fd, &file_info);
+    if (rc2 == -1)
       rc = EXIT_FAILURE;
+  }
 
+  char buf[STANDARD_BUFFER_SIZE];
+  if (rc == EXIT_SUCCESS)
+  {
+    length = snprintf(buf, STANDARD_BUFFER_SIZE, head_template, file_info.st_size, mime_type);
+    if (length < 0 || length >= STANDARD_BUFFER_SIZE)
+      rc = EXIT_FAILURE;
+  }
+
+  if (rc == EXIT_SUCCESS)
+  {
     write(conn, buf, length);
     fprintf(stdout, "Sended to client:\n");
     fprintf(stdout, "%s", buf);
+  }
 
-    length = snprintf(buf, sizeof(buf), "Content-Length: %lu\n", file_info.st_size);
-    if (length < 0 || length >= sizeof(buf))
-      rc = EXIT_FAILURE;
-    write(conn, buf, length);
-    fprintf(stdout, "%s", buf);
-
-    length = snprintf(buf, sizeof(buf), "Content-Type: %s\n\n", "video/mp4");
-    if (length < 0 || length >= sizeof(buf))
-      rc = EXIT_FAILURE;
-    write(conn, buf, length);
-    fprintf(stdout, "%s", buf);
-
+  if (rc == EXIT_SUCCESS)
+  {
     off_t offset = 0;
     rc2 = sendfile(conn, read_fd, &offset, file_info.st_size);
-    if (rc2 == -1) // При отправке файла произошла ошибка
+    if (rc2 == -1)
       rc = EXIT_FAILURE;
 
     // Debug file output
-    while ((rc2 = read(read_fd, buf, sizeof(buf)-1)) > 0)
+    while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
     {
       buf[rc2] = '\0';
       fprintf(stdout, "%s", buf);
@@ -170,12 +193,18 @@ int pump(int conn, const char* params)
   }
 
   close(read_fd);
-  if (idx)
-    free(idx);
+  if (file_path)
+    free(file_path);
+  if (id)
+    free(id);
   if (sig)
     free(sig);
+  if (mime_type)
+    free(mime_type);
   if (file_name)
     free(file_name);
+  if (flags)
+    free(flags);
 
   if (rc != EXIT_SUCCESS)
     send_not_found(conn);

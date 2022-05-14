@@ -242,18 +242,14 @@ int process_connection(int conn)
 int process_get(int conn, const char* page)
 {
   int rc = EXIT_SUCCESS;
-  char* pstr;
 
   if (service_detect("play=", &page)) // process_player
   {
     send_ok(conn);
     rc = player_show(conn, page);
   }
-  else if ((pstr = strstr(page, "pump="))) // process_pump
-  {
-    send_ok(conn);
+  else if (strstr(page, "?pump=")) // process_pump
     rc = pump(conn, page);
-  }
   else
     rc = showboard(conn, page);
 

@@ -9,11 +9,12 @@
 #include <fcntl.h> // O_RDONLY
 #include <sys/sendfile.h> // sendfile
 #include <sys/stat.h> // struct stat
+#include <dirent.h> // DIR, struct dirent, PATH_MAX
 //#include <sys/types.h>
 
 #include "defines.h"
 
-extern char* server_dir;
+extern char* showboard_dir;
 
 int pump(int conn, const char* params);
 
