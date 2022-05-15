@@ -417,18 +417,16 @@ char* get_self_executable_directory(ssize_t* length)
 
 char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
 {
-  char* result;
-  ssize_t dir_length = strlen("showboard/");
+  char* result = NULL;
 
-  if (bse_lenght + dir_length + 1 > PATH_MAX)
+  if ((*length = bse_lenght + strlen("showboard/")) + 1 <= PATH_MAX)
   {
-    *length = -1;
-    return NULL;
+    result = malloc(*length + 1);
+    memcpy(result, bse, bse_lenght); // Without NUL
+    strcpy(result + bse_lenght, "showboard/"); // Including NUL
   }
+  else
+    *length = -1;
 
-  *length = bse_lenght + dir_length;
-  result = malloc(*length + 1);
-  memcpy(result, bse, bse_lenght); // Without NUL
-  memcpy(result + bse_lenght, "showboard/", dir_length + 1); // Including NUL
   return result;
 }

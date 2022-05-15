@@ -3,6 +3,7 @@
 
 # Executables
 videobox
+publisher
 
 # Build directories
 Debug
@@ -11,3 +12,4 @@ Profile
 
 # Project file
 videobox.pro.user
+publisher.pro.user
