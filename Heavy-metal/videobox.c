@@ -20,10 +20,8 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
-void send_ok(const int conn);
 void send_bad_request(const int conn);
 void send_bad_method(const int conn);
-int service_detect(const char* service_token, const char** pos);
 char* server_dir;
 ssize_t server_dir_length;
 char* showboard_dir;
@@ -161,7 +159,6 @@ int process_connection(int conn)
 
   char* method = NULL;
   char* request = NULL;
-  // char* protocol = NULL; // Disable this, because we can serve without this information
   int iError = NO_ERRORS;
 
   fprintf(stdout, "Connection %d: Received from client\n", conn);
@@ -189,18 +186,6 @@ int process_connection(int conn)
     if (!request)
       iError = BAD_REQUEST;
   }
-// Disable this, because we can serve without this information
-/*  if (iError == NO_ERRORS)
-    iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
-
-  if (iError == NO_ERRORS)
-  {
-    protocol = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 9);
-    if ( !protocol || !(strcmp(protocol, "HTTP/1.0") == 0 || strcmp(protocol, "HTTP/1.1") == 0) )
-      iError = BAD_REQUEST;
-  }
-*/
-// End of: Disable this, because we can serve without this information
   if (iError == NO_ERRORS)
     iError = read_str(conn, "\r\n\r\n", buffer, sizeof(buffer), &pos, &bytes_read, 32000);
 
@@ -211,9 +196,6 @@ int process_connection(int conn)
     free(method);
   if (request)
     free(request);
-   // Disable this, because we can serve without this information
-  /*if (protocol)
-    free(protocol);*/
 
   switch (iError)
   {
@@ -226,10 +208,7 @@ int process_connection(int conn)
       send_bad_method(conn);
       break;
     case NOT_FOUND:
-      {
-        send_ok(conn);
-        int rc = showboard(conn, "Not Found");
-      }
+      showboard(conn);
       break;
   }
 
@@ -242,16 +221,14 @@ int process_connection(int conn)
 int process_get(int conn, const char* page)
 {
   int rc = EXIT_SUCCESS;
+  char* v;
 
-  if (service_detect("play=", &page)) // process_player
-  {
-    send_ok(conn);
+  if ((v = strstr(page, "?play=")))
     rc = player_show(conn, page);
-  }
-  else if (strstr(page, "?pump=")) // process_pump
+  else if ((v = strstr(page, "?pump=")))
     rc = pump(conn, page);
   else
-    rc = showboard(conn, page);
+    rc = showboard(conn);
 
   return rc;
 }
@@ -297,6 +274,9 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read == 0)
+        fprintf(stderr, "Point 1: received 0 bytes\n");
+        //return CONNECTION_CLOSED;
       *pos = buf;
     }
     else
@@ -333,6 +313,10 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read == 0)
+        fprintf(stderr, "Point 2: received 0 bytes\n");
+      //return CONNECTION_CLOSED;
+
       *pos = buf;
     }
     else
@@ -369,6 +353,10 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
     *pos = buf + i;
 
     *bytes_read = read_block(conn, *pos, buf_size - i);
+    if (*bytes_read == 0)
+      fprintf(stderr, "Point 3: received 0 bytes\n");
+    //return CONNECTION_CLOSED;
+
     total_read += *bytes_read;
     *pos = buf;
   }
@@ -378,31 +366,12 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
   return NO_ERRORS;
 }
 
-void send_ok(const int conn)
-{
-  char* ok_response =
-    "HTTP/1.0 200 OK\n"
-    "Content-type: text/html\n"
-    "\n";
-
-  size_t oksz = strlen(ok_response);
-  write(conn, ok_response, strlen(ok_response));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", ok_response);
-}
-
 void send_bad_request(const int conn)
 {
   char* bad_request_response =
     "HTTP/1.0 400 Bad Reguest\n"
     "Content-type: text/html\n"
-    "\n"
-    "<html>\n"
-    " <body>\n"
-    "  <h1>Bad Request</h1>\n"
-    "  <p>This server did not understand your request.</p>\n"
-    " </body>\n"
-    "</html>\n";
+    "\n";
 
   write(conn, bad_request_response, strlen(bad_request_response));
   fprintf(stdout, "Sended to client:\n");
@@ -414,36 +383,11 @@ void send_bad_method(const int conn)
   char* bad_method_response =
     "HTTP/1.0 501 Method Not Implemented\n"
     "Content-type: text/html\n"
-    "\n"
-    "<html>\n"
-    " <body>\n"
-    "  <h1>Method Not Implemented</h1>\n"
-    "  <p>The requested method is not supported.</p>\n"
-    " </body>\n"
-    "</html>\n";
+    "\n";
 
   write(conn, bad_method_response, strlen(bad_method_response));
   fprintf(stdout, "Sended to client:\n");
   fprintf(stdout, "%s", bad_method_response);
-}
-
-int service_detect(const char* service_token, const char** pos)
-{
-  const char* it = *pos;
-
-  while (*service_token == *it && *service_token != '\0')
-  {
-    service_token++;
-    it++;
-  }
-
-  if (*service_token == '\0')
-  {
-    *pos = it;
-    return 1;
-  }
-
-  return 0;
 }
 
 char* get_self_executable_directory(ssize_t* length)
@@ -463,6 +407,13 @@ char* get_self_executable_directory(ssize_t* length)
 
   return strndup(link_target, PATH_MAX);
 }
+
+/*char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
+{
+  char* result = strdup("/home/ylazutin/showboard/");
+  *length = strlen(result);
+  return result;
+}*/
 
 char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
 {

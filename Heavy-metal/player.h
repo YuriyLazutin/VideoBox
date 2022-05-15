@@ -4,7 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
+#include <string.h> // strlen
+#include <linux/limits.h> // PATH_MAX
+#include "defines.h"
+
+extern char* showboard_dir;
+extern ssize_t showboard_dir_length;
 
 int player_show(int conn, const char* params);
 

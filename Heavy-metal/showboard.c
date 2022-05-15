@@ -125,7 +125,7 @@ static char* page_begin =
 "<img src=\"https://yuriylazutin.github.io/lazutin.info/videobox/pics/logo.png\" class=\"logo\"></img>\n"
 "<div class=\"cont2\">\n"
 "<H1>Videobox</H1>\n"
-"<font class=\"rectext\">We recommend you:</font>\n"
+"<font class=\"rectext\">********************</font>\n"
 "</div>\n"
 "</div>\n"
 "</header>\n"
@@ -133,7 +133,7 @@ static char* page_begin =
 
 static char* note_template =
 "<div class=\"boardernote\">\n"
-" <a href=\"./?play=%s\">\n"
+" <a href=\"?play=%s\">\n"
 "   <img class=\"trumb\" src=\"%s\" title=\"%s\"></img>\n"
 "   <font class=\"viddesc\"><b>%s</b><br>%s</font>\n"
 " </a>\n";
@@ -154,7 +154,7 @@ void mk_title(char* result, char* path, const ssize_t path_length);
 void mk_descr(char* result, char* path, const ssize_t path_length);
 int mk_boardernote(char** result, const char* href, const char* trumb_file, const char* trumb_tlt, const char* desc);
 
-int showboard(int conn, const char* params)
+int showboard(int conn)
 {
   write(conn, page_begin, strlen(page_begin));
   fprintf(stdout, "Sended to client:\n");
@@ -243,25 +243,22 @@ int test_file(char* path)
 }
 
 // In this function we assumes that:
-// 1) buffer (targeted by result pointer) has enough space to store SIG_SIZE + ID_SIZE + FLAGS_SIZE string and 1 nul byte
+// 1) buffer (targeted by result pointer) has enough space to store SIG_SIZE + ID_SIZE string and 1 nul byte
 // 2) buffer (targeted by path pointer) has enough space to store PATH_MAX string
 int mk_href(char* result, char* path, const ssize_t path_length)
 {
   int found = 0;
-  char flags[FLAGS_SIZE] = "f4xx";
 
-  // Check path overflow
-  if (path_length + 11 > PATH_MAX) // 11 = max(strlen("video.mp4"), strlen("video.webm"), ...) + 1
-    return EXIT_FAILURE;
+  if (path_length + strlen("video.mp4") + 1 <= PATH_MAX)
+  {
+    strcpy(path + path_length, "video.mp4");
+    found = test_file(path);
+  }
 
-  strcpy(path + path_length, "video.mp4");
-  found = test_file(path);
-
-  if (!found)
+  if (!found && path_length + strlen("video.webm") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "video.webm");
-    if ( (found = test_file(path)) )
-      flags[1] = 'w';
+    found = test_file(path);
   } 
 
   if (!found)
@@ -269,7 +266,6 @@ int mk_href(char* result, char* path, const ssize_t path_length)
 
   memcpy(result, path + (path_length - 1 - ID_SIZE - 1 - SIG_SIZE), SIG_SIZE);
   memcpy(result + SIG_SIZE, path + (path_length - 1 - ID_SIZE), ID_SIZE);
-  memcpy(result + SIG_SIZE + ID_SIZE, flags, FLAGS_SIZE);
   result[SIG_SIZE + ID_SIZE + FLAGS_SIZE] = '\0';
 
   return EXIT_SUCCESS;
@@ -283,24 +279,20 @@ void mk_trumb(char* result, char* path, const ssize_t path_length)
   int found = 0;
   char flags[FLAGS_SIZE] = "ppxx";
 
-  // Check path overflow
-  if (path_length + 11 > PATH_MAX) // 11 = max(strlen("trumb.png"), strlen("trumb.webp"), ...) + 1
+  if (path_length + strlen("trumb.png") + 1 <= PATH_MAX)
   {
-    strncpy(result, "https://yuriylazutin.github.io/lazutin.info/videobox/pics/logo.png", SMALL_BUFFER_SIZE);
-    return;
+    strcpy(path + path_length, "trumb.png");
+    found = test_file(path);
   }
 
-  strcpy(path + path_length, "trumb.png");
-  found = test_file(path);
-
-  if (!found)
+  if (!found && path_length + strlen("trumb.jpg") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "trumb.jpg");
     if ( (found = test_file(path)) )
       flags[1] = 'j';
   }
 
-  if (!found)
+  if (!found && path_length + strlen("trumb.webp") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "trumb.webp");
     if ( (found = test_file(path)) )
@@ -326,90 +318,84 @@ void mk_trumb(char* result, char* path, const ssize_t path_length)
 // 2) buffer (targeted by path pointer) has enough space to store PATH_MAX string
 void mk_title(char* result, char* path, const ssize_t path_length)
 {
+  int iError = NO_ERRORS;
   int found = 0;
 
-  // Check path overflow
-  if (path_length + 11 > PATH_MAX) // 11 = max(strlen("title.html"), strlen("title.txt"), ...) + 1
+  if (path_length + strlen("title.html") + 1 <= PATH_MAX)
   {
-    strncpy(result, "Unnamed video", SMALL_BUFFER_SIZE);
-    return;
+    strcpy(path + path_length, "title.html");
+    found = test_file(path);
   }
 
-  strcpy(path + path_length, "title.html");
-  found = test_file(path);
-
-  if (!found)
+  if (!found && path_length + strlen("title.txt") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "title.txt");
     found = test_file(path);
   }
 
-  if (!found)
+  if (found)
   {
-    strncpy(result, "Unnamed video", SMALL_BUFFER_SIZE);
-    return;
+    int fd = open(path, O_RDONLY);
+    if (fd == -1)
+      iError = OPEN_FILE_ERROR;
+    else
+    {
+      ssize_t rc = read(fd, result, SMALL_BUFFER_SIZE - 1);
+      if (rc <= 0)
+        iError = READ_FILE_ERROR;
+      else
+      {
+        result[rc] = '\0';
+        close(fd);
+      }
+    }
   }
+  else
+    iError = NOT_FOUND;
 
-  int fd = open(path, O_RDONLY);
-  if (fd == -1)
-  {
+  if (iError != NO_ERRORS)
     strncpy(result, "Unnamed video", SMALL_BUFFER_SIZE);
-    return;
-  }
-
-  ssize_t rc = read(fd, result, SMALL_BUFFER_SIZE - 1);
-  if (rc <= 0)
-  {
-    strncpy(result, "Unnamed video", SMALL_BUFFER_SIZE);
-    return;
-  }
-
-  result[rc] = '\0';
-  close(fd);
 }
 
 void mk_descr(char* result, char* path, const ssize_t path_length)
 {
+  int iError = NO_ERRORS;
   int found = 0;
 
-  // Check path overflow
-  if (path_length + 11 > PATH_MAX) // 11 = max(strlen("descr.html"), strlen("descr.txt"), ...) + 1
+  if (path_length + strlen("descr.html") + 1 <= PATH_MAX)
   {
-    strncpy(result, "Watch this video...", SMALL_BUFFER_SIZE);
-    return;
+    strcpy(path + path_length, "descr.html");
+    found = test_file(path);
   }
 
-  strcpy(path + path_length, "descr.html");
-  found = test_file(path);
-
-  if (!found)
+  if (!found && path_length + strlen("descr.txt") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "descr.txt");
     found = test_file(path);
   }
 
-  if (!found)
+  if (found)
   {
-    strncpy(result, "Watch this video...", SMALL_BUFFER_SIZE);
-    return;
+    int fd = open(path, O_RDONLY);
+    if (fd == -1)
+      iError = OPEN_FILE_ERROR;
+    else
+    {
+      ssize_t rc = read(fd, result, STANDARD_BUFFER_SIZE - 1);
+      if (rc <= 0)
+        iError = READ_FILE_ERROR;
+      else
+      {
+        result[rc] = '\0';
+        close(fd);
+      }
+    }
   }
+  else
+    iError = NOT_FOUND;
 
-  int fd = open(path, O_RDONLY);
-  if (fd == -1)
-  {
+  if (iError != NO_ERRORS)
     strncpy(result, "Watch this video...", SMALL_BUFFER_SIZE);
-    return;
-  }
-
-  ssize_t rc = read(fd, result, STANDARD_BUFFER_SIZE - 1);
-  if (rc <= 0)
-  {
-    strncpy(result, "Watch this video...", SMALL_BUFFER_SIZE);
-    return;
-  }
-
-  result[rc] = '\0';
-  close(fd);
 }
 
 int mk_boardernote(char** result, const char* href, const char* trumb_file, const char* title, const char* descr)

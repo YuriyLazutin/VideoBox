@@ -179,17 +179,20 @@ int pump(int conn, const char* params)
 
   if (rc == EXIT_SUCCESS)
   {
+    // Debug file output
+    fprintf(stdout, "File content here...\n");
+
     off_t offset = 0;
     rc2 = sendfile(conn, read_fd, &offset, file_info.st_size);
     if (rc2 == -1)
       rc = EXIT_FAILURE;
 
     // Debug file output
-    while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
+    /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
     {
       buf[rc2] = '\0';
       fprintf(stdout, "%s", buf);
-    }
+    }*/
   }
 
   close(read_fd);

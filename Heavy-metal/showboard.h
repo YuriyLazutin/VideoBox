@@ -16,6 +16,6 @@
 extern char* showboard_dir;
 extern ssize_t showboard_dir_length;
 
-int showboard(int conn, const char* params);
+int showboard(int conn);
 
 #endif // SHOWBOARD_H
