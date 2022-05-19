@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <unistd.h> // readlink
 #include <errno.h>
-#include <string.h>
+#include <string.h> // strcpy
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -11,6 +11,11 @@
 #include "player.h"
 #include "pump.h"
 #include "showboard.h"
+
+#ifdef DEBUG
+  #include "logger.h"
+  int server_log_fd;
+#endif
 
 // catch SIGCHLD
 void clean_up_child_process(int);

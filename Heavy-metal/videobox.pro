@@ -4,6 +4,7 @@ CONFIG -= app_bundle
 CONFIG -= qt
 
 SOURCES += \
+        logger.c \
         player.c \
         pump.c \
         showboard.c \
@@ -11,6 +12,7 @@ SOURCES += \
 
 HEADERS += \
     defines.h \
+    logger.h \
     player.h \
     pump.h \
     showboard.h
