@@ -88,21 +88,51 @@ int main()
   }
 
   // Process connections
-  while (1)
+  do
   {
     address_length = sizeof(remote_address);
     memset(&remote_address, 0, address_length);
     int connection = accept(server_socket, (struct sockaddr *)&remote_address, &address_length);
     if (connection == -1)
     {
-      if (errno == EINTR) // Function was interrupded by signal. Repeat attempt
-        continue;
-      else // Something wrong
+      int errcode = errno;
+      fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errcode));
+
+      switch (errcode)
       {
-        fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errno));
-        if (showboard_dir)
-          free(showboard_dir);
-        return EXIT_FAILURE;
+        // Critical errors (shutdown server)
+        case EBADF:             // invalid descriptor. server_socket is not an open file descriptor.
+        case EINVAL:            // Socket is not listening for connections, or address_length is invalid
+        case ENOTSOCK:          // The file descriptor server_socket does not refer to a socket.
+        case EOPNOTSUPP:        // The referenced socket is not of type SOCK_STREAM.
+        /*
+          // In addition, network errors for the new socket and as defined for the protocol may be returned.
+          case ERESTART:          // Interrupted system call should be restarted (The value ERESTARTSYS may be seen during a trace).
+          case ESOCKTNOSUPPORT:   // Socket type not supported
+          case EPROTONOSUPPORT:   // Protocol not supported
+        */
+          rc = EXIT_FAILURE;
+          continue;
+
+        default:  // Not critical errors (Repeat attempt after pause)
+        /*
+          EAGAIN, EWOULDBLOCK:   The socket is marked nonblocking and no connections are present to be accepted.
+          ECONNABORTED:          A connection has been aborted.
+          EFAULT:                The remote_address argument is not in a writable part of the user address space.
+          EINTR:                 The system call was interrupted by a signal.
+          EMFILE:                The per-process limit on the number of open file descriptors has been reached.
+          ENFILE:                The system-wide limit on the total number of open files has been reached.
+          ENOBUFS, ENOMEM:       Not enough free memory.  This often means that the memory allocation is limited by the socket buffer limits, not by the system memory.
+          EPERM:                 Firewall rules forbid connection.
+          EPROTO:                Protocol error.
+
+          // In addition, network errors for the new socket and as defined for the protocol may be returned. Various Linux kernels can return other errors
+          ENOSR:                 Out of streams resources
+          ETIMEDOUT:             Connection timed out
+        */
+          sleep(1);
+          continue;
+
       }
     }
     else
@@ -129,20 +159,19 @@ int main()
     else // fork() failed
     {
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
-      if (showboard_dir)
-        free(showboard_dir);
-      return EXIT_FAILURE;
+      rc = EXIT_FAILURE;
     }
-  }
+  } while (rc == EXIT_SUCCESS);
 
   if (showboard_dir)
     free(showboard_dir);
-  return EXIT_SUCCESS;
+  return rc;
 }
 
 // catch SIGCHLD
 void clean_up_child_process(int signal_number)
 {
+  fprintf(stderr, "Received signal: %d", signal_number);
   int status;
   wait(&status);
 }
