@@ -22,30 +22,32 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 void send_bad_request(const int conn);
 void send_bad_method(const int conn);
-char* server_dir;
-ssize_t server_dir_length;
 char* showboard_dir;
 ssize_t showboard_dir_length;
-char* get_self_executable_directory(ssize_t* length);
-char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght);
 
 int main()
 {
-  server_dir = get_self_executable_directory(&server_dir_length);
-  if (server_dir_length <= 0)
-  {
-    fprintf(stderr, "Error in function \"get_self_executable_directory\": server_dir_length <= 0\n");
+  showboard_dir = malloc(PATH_MAX);
+  if (!showboard_dir)
     return EXIT_FAILURE;
-  }
+  showboard_dir_length = readlink("/proc/self/exe", showboard_dir, PATH_MAX - 1);
+  if (showboard_dir_length == -1)
+    return EXIT_FAILURE;
+  while (showboard_dir_length > 0 && showboard_dir[showboard_dir_length - 1] != '/')
+    showboard_dir_length--;
+  if (!showboard_dir_length)
+    return EXIT_FAILURE;
+  if (showboard_dir_length + strlen("showboard/") + 1 > PATH_MAX)
+    return EXIT_FAILURE;
+  strcpy(showboard_dir + showboard_dir_length, "showboard/");
+  showboard_dir_length += strlen("showboard/");
+  showboard_dir = realloc(showboard_dir, showboard_dir_length + 1);
+  if (!showboard_dir)
+    return EXIT_FAILURE;
 
-  showboard_dir = get_showboard_directory(&showboard_dir_length, server_dir, server_dir_length);
-  if (showboard_dir_length <= 0)
-  {
-    fprintf(stderr, "Error in function \"get_showboard_directory\": showboard_dir_length <= 0\n");
-    if (server_dir)
-      free(server_dir);
-    return EXIT_FAILURE;
-  }
+  //free(showboard_dir);  // Just for debug
+  //showboard_dir = strdup("/home/ylazutin/showboard/"); // Just for debug
+  //showboard_dir_length = strlen(showboard_dir); // Just for debug
 
   struct sockaddr_in server_address;
   struct sockaddr_in remote_address;
@@ -98,8 +100,6 @@ int main()
       else // Something wrong
       {
         fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errno));
-        if (server_dir)
-          free(server_dir);
         if (showboard_dir)
           free(showboard_dir);
         return EXIT_FAILURE;
@@ -129,16 +129,12 @@ int main()
     else // fork() failed
     {
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
-      if (server_dir)
-        free(server_dir);
       if (showboard_dir)
         free(showboard_dir);
       return EXIT_FAILURE;
     }
   }
 
-  if (server_dir)
-    free(server_dir);
   if (showboard_dir)
     free(showboard_dir);
   return EXIT_SUCCESS;
@@ -388,45 +384,4 @@ void send_bad_method(const int conn)
   write(conn, bad_method_response, strlen(bad_method_response));
   fprintf(stdout, "Sended to client:\n");
   fprintf(stdout, "%s", bad_method_response);
-}
-
-char* get_self_executable_directory(ssize_t* length)
-{
-  char link_target[PATH_MAX];
-
-  // Read symlink /proc/self/exe (readlink does not insert NUL into buf)
-  *length = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
-  if (*length == -1)
-    return NULL;
-
-  // Remove file name
-  while (*length > 0 && link_target[*length] != '/')
-    link_target[(*length)--] = '\0';
-
-  (*length)++;
-
-  return strndup(link_target, PATH_MAX);
-}
-
-/*char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
-{
-  char* result = strdup("/home/ylazutin/showboard/");
-  *length = strlen(result);
-  return result;
-}*/
-
-char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
-{
-  char* result = NULL;
-
-  if ((*length = bse_lenght + strlen("showboard/")) + 1 <= PATH_MAX)
-  {
-    result = malloc(*length + 1);
-    memcpy(result, bse, bse_lenght); // Without NUL
-    strcpy(result + bse_lenght, "showboard/"); // Including NUL
-  }
-  else
-    *length = -1;
-
-  return result;
 }
