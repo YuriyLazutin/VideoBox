@@ -190,14 +190,17 @@ int player_show(int conn, const char* params)
     {
       snprintf(itm, length, video_template, video_href, trumb_href);
 
-      fprintf(stdout, "Sended to client:\n");
       write(conn, page_begin, strlen(page_begin));
-      fprintf(stdout, "%s", page_begin);
       write(conn, itm, strlen(itm));
-      fprintf(stdout, "%s", itm);
       write(conn, page_end, strlen(page_end));
-      fprintf(stdout, "%s", page_end);
       free(itm);
+
+      #ifndef NDEBUG
+        log_print("Sended to client:\n");
+        log_print("%s", page_begin);
+        log_print("%s", itm);
+        log_print("%s", page_end);
+      #endif
     }
     else
       iError = MALLOC_FILED;

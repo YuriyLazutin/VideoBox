@@ -14,8 +14,10 @@ void send_not_found(const int conn)
     "</html>\n";
 
   write(conn, not_found_response, strlen(not_found_response));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", not_found_response);
+  #ifndef NDEBUG
+    log_print("Sended to client:\n");
+    log_print("%s", not_found_response);
+  #endif
 }
 
 /* PNG package
@@ -110,9 +112,7 @@ int pump(int conn, const char* params)
     }
     if (file_name == NULL || mime_type == NULL)
       rc = EXIT_FAILURE;
-
   }
-
 
   char *sig, *id;
   if (rc == EXIT_SUCCESS)
@@ -128,7 +128,7 @@ int pump(int conn, const char* params)
   {
     length = strlen(showboard_dir) + SIG_SIZE + 1 + ID_SIZE + 1 + strlen(file_name) + 1;
     if (length >= PATH_MAX)
-        rc = EXIT_FAILURE;
+      rc = EXIT_FAILURE;
   }
 
   if (rc == EXIT_SUCCESS)
@@ -173,26 +173,38 @@ int pump(int conn, const char* params)
   if (rc == EXIT_SUCCESS)
   {
     write(conn, buf, length);
-    fprintf(stdout, "Sended to client:\n");
-    fprintf(stdout, "%s", buf);
+    #ifndef NDEBUG
+      log_print("Sended to client:\n");
+      log_print("%s", buf);
+    #endif
   }
 
   if (rc == EXIT_SUCCESS)
   {
-    // Debug file output
-    fprintf(stdout, "File content here...\n");
-
     off_t offset = 0;
     rc2 = sendfile(conn, read_fd, &offset, file_info.st_size);
     if (rc2 == -1)
+    {
       rc = EXIT_FAILURE;
+      #ifndef NDEBUG
+        log_print("Error: sendfile filed!\n");
+      #endif
+    }
+    #ifndef NDEBUG
+    else if (rc2 != file_info.st_size)
+      log_print("Warning: sendfile sended less bytes then requested (%d < %d)\n", rc2, file_info.st_size);
+    #endif
 
     // Debug file output
-    /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
-    {
-      buf[rc2] = '\0';
-      fprintf(stdout, "%s", buf);
-    }*/
+    #ifndef NDEBUG
+      log_print("File content here...\n");
+      /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
+      {
+        buf[rc2] = '\0';
+        log_print("%s", buf);
+      }*/
+    #endif
+
   }
 
   close(read_fd);

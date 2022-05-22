@@ -19,7 +19,9 @@
 #define   CONNECTION_CLOSED      4
 #define   MALLOC_FILED           5
 #define   PATH_OVERFLOW          6
-#define   OPEN_FILE_ERROR        7
-#define   READ_FILE_ERROR        8
+#define   PATH_INVALID           7
+#define   OPEN_FILE_ERROR        8
+#define   READ_FILE_ERROR        9
+#define   READ_LINK_ERROR       10
 
 #endif // DEFINES_H

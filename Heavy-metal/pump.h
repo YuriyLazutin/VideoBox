@@ -15,6 +15,10 @@
 
 #include "defines.h"
 
+#ifndef NDEBUG
+  #include "logger.h"
+#endif
+
 extern char* showboard_dir;
 
 int pump(int conn, const char* params);

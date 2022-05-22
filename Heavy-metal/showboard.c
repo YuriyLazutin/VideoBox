@@ -157,8 +157,10 @@ int mk_boardernote(char** result, const char* href, const char* trumb_file, cons
 int showboard(int conn)
 {
   write(conn, page_begin, strlen(page_begin));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", page_begin);
+  #ifndef NDEBUG
+    log_print("Sended to client:\n");
+    log_print("%s", page_begin);
+  #endif
 
   int rc = EXIT_SUCCESS, rc2;
   ssize_t sig_length, id_length, entry_length;
@@ -215,7 +217,9 @@ int showboard(int conn)
           if (rc2 == EXIT_SUCCESS)
           {
             write(conn, brdnote, strlen(brdnote));
-            fprintf(stdout, "%s", brdnote);
+            #ifndef NDEBUG
+              log_print("%s", brdnote);
+            #endif
           }
         }
         closedir(id_dir);
@@ -228,7 +232,9 @@ int showboard(int conn)
     free(brdnote);
 
   write(conn, page_end, strlen(page_end));
-  fprintf(stdout, "%s", page_end);
+  #ifndef NDEBUG
+    log_print("%s", page_end);
+  #endif
 
   return rc;
 }

@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h> // readlink
-#include <errno.h>
-#include <string.h> // strcpy
+#include <errno.h> // errno
+#include <string.h> // strcpy, strerror
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -12,9 +12,9 @@
 #include "pump.h"
 #include "showboard.h"
 
-#ifdef DEBUG
+#ifndef NDEBUG
   #include "logger.h"
-  int server_log_fd;
+  int connection_id;
 #endif
 
 // catch SIGCHLD
@@ -38,8 +38,7 @@ int main()
   showboard_dir_length = readlink("/proc/self/exe", showboard_dir, PATH_MAX - 1);
   if (showboard_dir_length == -1)
     return EXIT_FAILURE;
-  while (showboard_dir_length > 0 && showboard_dir[showboard_dir_length - 1] != '/')
-    showboard_dir_length--;
+  while (showboard_dir_length > 0 && showboard_dir[showboard_dir_length - 1] != '/') showboard_dir_length--;
   if (!showboard_dir_length)
     return EXIT_FAILURE;
   if (showboard_dir_length + strlen("showboard/") + 1 > PATH_MAX)
@@ -53,6 +52,11 @@ int main()
   //free(showboard_dir);  // Just for debug
   //showboard_dir = strdup("/home/ylazutin/showboard/"); // Just for debug
   //showboard_dir_length = strlen(showboard_dir); // Just for debug
+
+  #ifndef NDEBUG
+    server_log_init();
+    connection_id = 0;
+  #endif
 
   struct sockaddr_in server_address;
   struct sockaddr_in remote_address;
@@ -74,21 +78,33 @@ int main()
   int server_socket = socket(PF_INET, SOCK_STREAM, 0);
   if (server_socket == -1)
   {
+    #ifndef NDEBUG
+      log_print("Error in function \"socket\": %s\n", strerror(errno));
+    #else
     fprintf(stderr, "Error in function \"socket\": %s\n", strerror(errno));
+    #endif
     return EXIT_FAILURE;
   }
 
   int rc = bind(server_socket, (const struct sockaddr *)&server_address, sizeof(server_address));
   if (rc != 0)
   {
+    #ifndef NDEBUG
+      log_print("Error in function \"bind\": %s\n", strerror(errno));
+    #else
     fprintf(stderr, "Error in function \"bind\": %s\n", strerror(errno));
+    #endif
     return EXIT_FAILURE;
   }
 
   rc = listen(server_socket, SERVER_LISTEN_BACKLOG);
   if (rc != 0)
   {
+    #ifndef NDEBUG
+      log_print("Error in function \"listen\": %s\n", strerror(errno));
+    #else
     fprintf(stderr, "Error in function \"listen\": %s\n", strerror(errno));
+    #endif
     return EXIT_FAILURE;
   }
 
@@ -101,7 +117,11 @@ int main()
     if (connection == -1)
     {
       int errcode = errno;
+      #ifndef NDEBUG
+        log_print("Error in function \"accept\": %s\n", strerror(errcode));
+      #else
       fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errcode));
+      #endif
 
       switch (errcode)
       {
@@ -140,8 +160,13 @@ int main()
 
       }
     }
+    #ifndef NDEBUG
     else
-      fprintf(stdout, "Connection accepted from %s:%d\n", inet_ntoa(remote_address.sin_addr), (int)ntohs(remote_address.sin_port));
+    {
+      connection_id++;
+      log_print("Connection accepted from %s:%d (connection_id = %d)\n", inet_ntoa(remote_address.sin_addr), (int)ntohs(remote_address.sin_port), connection_id);
+    }
+    #endif
 
     pid_t child_pid = fork();
 
@@ -149,8 +174,13 @@ int main()
     {
       // Close descriptors stdin, stdout, server_socket
       close(STDIN_FILENO);
-      //close(STDOUT_FILENO);
+      close(STDOUT_FILENO);
       close(server_socket);
+      #ifndef NDEBUG
+        // Close server log descriptor and open connection log descriptor
+        log_close();
+        connection_log_init(connection_id);
+      #endif
 
       rc = process_connection(connection);
 
@@ -163,20 +193,33 @@ int main()
     }
     else // fork() failed
     {
+      #ifndef NDEBUG
+        log_print("Error in function \"fork\": %s\n", strerror(errno));
+      #else
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
+      #endif
       rc = EXIT_FAILURE;
     }
   } while (rc == EXIT_SUCCESS);
 
   if (showboard_dir)
     free(showboard_dir);
+
+  #ifndef NDEBUG
+    log_close();
+  #endif
+
   return rc;
 }
 
 // catch SIGCHLD
 void clean_up_child_process(int signal_number)
 {
-  fprintf(stderr, "Received signal: %d", signal_number);
+  #ifndef NDEBUG
+    log_print("Received signal: %d\n", signal_number);
+  #else
+  fprintf(stderr, "Received signal: %d\n", signal_number);
+  #endif
   int status;
   wait(&status);
 }
@@ -191,7 +234,9 @@ int process_connection(int conn)
   char* request = NULL;
   int iError = NO_ERRORS;
 
-  fprintf(stdout, "Connection %d: Received from client\n", conn);
+  #ifndef NDEBUG
+    log_print("Connection %d: Received from client\n", conn);
+  #endif
   bytes_read = read_block(conn, buffer, sizeof(buffer));
   if (bytes_read <= 0)
     iError = BAD_REQUEST;
@@ -270,14 +315,22 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
   if (bytes_read > 0)
   {
     *(buf + bytes_read) = '\0';
-    fprintf(stdout, "%s", buf);
+    #ifndef NDEBUG
+    log_print("%s", buf);
+    #endif
   }
   else if (bytes_read == 0)
-    fprintf(stdout, "Connection %d terminated without sending any data\n", conn);
+  {
+    #ifndef NDEBUG
+    log_print("Connection terminated without sending any data\n");
+    #endif
+  }
   else // (bytes_read == -1)
   {
-    fprintf(stderr, "Error in function \"read\": %s\n", strerror(errno));
-    fprintf(stderr, "Connection %d unexpectedly terminated\n", conn);
+    #ifndef NDEBUG
+    log_print("Error in function \"read\": %s\n", strerror(errno));
+    log_print("Connection unexpectedly terminated\n");
+    #endif
   }
   return bytes_read;
 }
@@ -296,7 +349,9 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
     if (total_cnt > read_limit)
     {
-      fprintf(stderr, "Connection %d: limit exceeded while skip spaces\n", conn);
+      #ifndef NDEBUG
+      log_print("Limit exceeded while skip spaces\n");
+      #endif
       *bytes_read -= cnt;
       return BAD_REQUEST;
     }
@@ -304,9 +359,11 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
+      #ifndef NDEBUG
       if (*bytes_read == 0)
-        fprintf(stderr, "Point 1: received 0 bytes\n");
-        //return CONNECTION_CLOSED;
+        log_print("Point 1: received 0 bytes\n");
+      #endif
+      //return CONNECTION_CLOSED;
       *pos = buf;
     }
     else
@@ -332,7 +389,9 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     {
       if (result)
         free(result);
-      fprintf(stderr, "Connection %d: limit exceeded while read_word\n", conn);
+      #ifndef NDEBUG
+      log_print("Limit exceeded while read_word\n");
+      #endif
       *bytes_read -= cnt;
       return NULL;
     }
@@ -343,8 +402,10 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
+      #ifndef NDEBUG
       if (*bytes_read == 0)
-        fprintf(stderr, "Point 2: received 0 bytes\n");
+        log_print("Point 2: received 0 bytes\n");
+      #endif
       //return CONNECTION_CLOSED;
 
       *pos = buf;
@@ -371,7 +432,9 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
   {
     if (total_read > read_limit)
     {
-      fprintf(stderr, "Connection %d: limit exceeded while reading string\n", conn);
+      #ifndef NDEBUG
+      log_print("Limit exceeded while reading string\n");
+      #endif
       *bytes_read = 0;
       return BAD_REQUEST;
     }
@@ -383,8 +446,10 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
     *pos = buf + i;
 
     *bytes_read = read_block(conn, *pos, buf_size - i);
+    #ifndef NDEBUG
     if (*bytes_read == 0)
-      fprintf(stderr, "Point 3: received 0 bytes\n");
+      log_print("Point 3: received 0 bytes\n");
+    #endif
     //return CONNECTION_CLOSED;
 
     total_read += *bytes_read;
@@ -404,8 +469,10 @@ void send_bad_request(const int conn)
     "\n";
 
   write(conn, bad_request_response, strlen(bad_request_response));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", bad_request_response);
+  #ifndef NDEBUG
+    log_print("Sended to client:\n");
+    log_print("%s", bad_request_response);
+  #endif
 }
 
 void send_bad_method(const int conn)
@@ -416,6 +483,8 @@ void send_bad_method(const int conn)
     "\n";
 
   write(conn, bad_method_response, strlen(bad_method_response));
-  fprintf(stdout, "Sended to client:\n");
-  fprintf(stdout, "%s", bad_method_response);
+  #ifndef NDEBUG
+    log_print("Sended to client:\n");
+    log_print("%s", bad_method_response);
+  #endif
 }
