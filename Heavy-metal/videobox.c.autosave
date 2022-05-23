@@ -5,6 +5,7 @@
 #include <string.h> // strcpy, strerror
 #include <arpa/inet.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
 #include <signal.h>
 //#include <linux/limits.h> // PATH_MAX
 #include "defines.h"
