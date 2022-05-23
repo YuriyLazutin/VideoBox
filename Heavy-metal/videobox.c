@@ -5,6 +5,7 @@
 #include <string.h> // strcpy, strerror
 #include <arpa/inet.h>
 #include <sys/wait.h>
+//#include <sys/socket.h>
 #include <signal.h>
 //#include <linux/limits.h> // PATH_MAX
 #include "defines.h"
@@ -86,7 +87,16 @@ int main()
     return EXIT_FAILURE;
   }
 
-  int rc = bind(server_socket, (const struct sockaddr *)&server_address, sizeof(server_address));
+  const int on = 1;
+  int rc = setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  if (rc == -1)
+  {
+    #ifndef NDEBUG
+      log_print("Error in function \"setsockopt\": %s\n", strerror(errno));
+    #endif
+  }
+
+  rc = bind(server_socket, (const struct sockaddr *)&server_address, sizeof(server_address));
   if (rc != 0)
   {
     #ifndef NDEBUG
