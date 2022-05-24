@@ -295,7 +295,36 @@ int process_connection(int conn)
     iError = read_str(conn, "\r\n\r\n", buffer, sizeof(buffer), &pos, &bytes_read, 32000);
 
   if (iError == NO_ERRORS)
+  {
     process_get(conn, request);
+
+    int flags = fcntl(conn, F_GETFL);
+    if (flags == -1)
+    {
+      #ifndef NDEBUG
+        log_print("Error in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
+      #endif
+    }
+    else
+    {
+      int rc = fcntl(conn, F_SETFL, flags | O_NONBLOCK);
+      if (rc == -1)
+      {
+        #ifndef NDEBUG
+          log_print("Error in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
+        #endif
+      }
+
+      #ifndef NDEBUG
+        // Just for test
+        flags = fcntl(conn, F_GETFL);
+        if (flags == -1)
+          log_print("Error 2 in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
+        if (flags & O_NONBLOCK)
+          log_print("Non-block mode is on.\n");
+      #endif
+    }
+  }
 
   if (method)
     free(method);
