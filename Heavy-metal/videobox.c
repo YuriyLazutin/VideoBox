@@ -16,6 +16,7 @@
 #ifndef NDEBUG
   #include "logger.h"
   int connection_id;
+  void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 #endif
 
 // catch SIGCHLD
@@ -297,33 +298,9 @@ int process_connection(int conn)
   if (iError == NO_ERRORS)
   {
     process_get(conn, request);
-
-    int flags = fcntl(conn, F_GETFL);
-    if (flags == -1)
-    {
-      #ifndef NDEBUG
-        log_print("Error in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
-      #endif
-    }
-    else
-    {
-      int rc = fcntl(conn, F_SETFL, flags | O_NONBLOCK);
-      if (rc == -1)
-      {
-        #ifndef NDEBUG
-          log_print("Error in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
-        #endif
-      }
-
-      #ifndef NDEBUG
-        // Just for test
-        flags = fcntl(conn, F_GETFL);
-        if (flags == -1)
-          log_print("Error 2 in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
-        if (flags & O_NONBLOCK)
-          log_print("Non-block mode is on.\n");
-      #endif
-    }
+    #ifndef NDEBUG
+    read_tail(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+    #endif
   }
 
   if (method)
@@ -543,6 +520,77 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
   *pos = pstr;
   return NO_ERRORS;
 }
+
+#ifndef NDEBUG
+void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
+{
+  int flags = fcntl(conn, F_GETFL);
+  if (flags == -1)
+  {
+    log_print("read_tail: Error in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
+    return;
+  }
+
+  int rc = fcntl(conn, F_SETFL, flags | O_NONBLOCK);
+  if (rc == -1)
+  {
+    log_print("read_tail: Error in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
+    return;
+  }
+
+  // Just for test
+  int newflags = fcntl(conn, F_GETFL);
+  if (newflags == -1)
+    fprintf(stdout, "read_tail: Error 2 in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
+  else if (newflags & O_NONBLOCK)
+    fprintf(stdout, "read_tail: Non-block mode is on.\n");
+  // End of Just for test
+
+  ssize_t cnt = 0;
+
+  do
+  {
+    if (*bytes_read <= 0)
+    {
+      *bytes_read = read_block(conn, buf, buf_size);
+      *pos = buf;
+    }
+
+    if (*bytes_read > 0)
+    {
+      if (cnt == 0)
+        log_print("Received tail from client:\n");
+
+      log_print("%s", *pos);
+      cnt += *bytes_read;
+
+      if (cnt > read_limit)
+      {
+        log_print("Limit exceeded while read_tail\n");
+        break;
+      }
+      *bytes_read = read_block(conn, buf, buf_size);
+      *pos = buf;
+    }
+  }
+  while (*bytes_read);
+
+  rc = fcntl(conn, F_SETFL, flags);
+  if (rc == -1)
+  {
+    log_print("read_tail: Error 2 in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
+    return;
+  }
+
+  // Just for test
+  newflags = fcntl(conn, F_GETFL);
+  if (newflags == -1)
+    fprintf(stdout, "read_tail: Error 3 in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
+  else if (newflags != flags)
+    fprintf(stdout, "read_tail: Error! Flags was not restored.\n");
+  // End of Just for test
+}
+#endif
 
 void send_bad_request(const int conn)
 {
