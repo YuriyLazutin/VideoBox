@@ -120,78 +120,15 @@ void log_close()
 
 void log_print(char* format, ...)
 {
-  char *pos, buf[SMALL_BUFFER_SIZE], *pBuf, *sVal;
-  int len;
-  va_list ap;
-
-  pos = format;
-  pBuf = buf;
-  va_start(ap, format);
-
-  while (*pos)
+  FILE* fp = fdopen(log_fd, "w");
+  if (fp == NULL)
   {
-    if (*pos != '%')
-    {
-      *pBuf++ = *pos++;
-      if (pBuf - buf == SMALL_BUFFER_SIZE)
-      {
-        write(log_fd, buf, pBuf - buf);
-        pBuf = buf;
-      }
-      continue;
-    }
-
-    if (pBuf != buf)
-    {
-      write(log_fd, buf, pBuf - buf);
-      pBuf = buf;
-    }
-
-    switch (*++pos)
-    {
-      case 'd':
-        len = snprintf(buf, SMALL_BUFFER_SIZE, "%d", va_arg(ap, int));
-        if (len >= SMALL_BUFFER_SIZE)
-          len = SMALL_BUFFER_SIZE - 1;
-        else if (len < 0)
-          len = 0;
-        pBuf += len;
-        break;
-      case 'u':
-        len = snprintf(buf, SMALL_BUFFER_SIZE, "%u", va_arg(ap, unsigned int));
-        if (len >= SMALL_BUFFER_SIZE)
-          len = SMALL_BUFFER_SIZE - 1;
-        else if (len < 0)
-          len = 0;
-        pBuf += len;
-        break;
-      case 'f':
-        len = snprintf(buf, SMALL_BUFFER_SIZE, "%f", va_arg(ap, double));
-        if (len >= SMALL_BUFFER_SIZE)
-          len = SMALL_BUFFER_SIZE - 1;
-        else if (len < 0)
-          len = 0;
-        pBuf += len;
-        break;
-      case 's':
-        sVal = va_arg(ap, char*);
-        write(log_fd, sVal, strlen(sVal));
-        break;
-      default:
-        *pBuf++ = *pos;
-        break;
-      }
-
-      if (pBuf - buf == SMALL_BUFFER_SIZE)
-      {
-        write(log_fd, buf, pBuf - buf);
-        pBuf = buf;
-      }
-      pos++;
+    fprintf(stderr, "log_print: Bad fd->fp convertion! Will used stderr");
+    fp = stderr;
   }
 
-  if (pBuf != buf)
-    write(log_fd, buf, pBuf - buf);
-
+  va_list ap;
+  va_start(ap, format);
+  vfprintf(fp, format, ap);
   va_end(ap);
 }
