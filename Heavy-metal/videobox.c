@@ -8,6 +8,7 @@
 //#include <sys/socket.h>
 #include <signal.h>
 //#include <linux/limits.h> // PATH_MAX
+#include <poll.h>
 #include "defines.h"
 #include "player.h"
 #include "pump.h"
@@ -363,6 +364,46 @@ int process_get(int conn, const char* page)
 
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
 {
+  struct pollfd fds;
+  fds.fd = conn;
+  fds.events = POLLIN;
+  fds.revents = 0;
+
+  int rc = poll(&fds, 1, READ_BLOCK_TIME_LIMIT); // Wait 5 sec
+  if (rc == -1)
+  {
+    #ifndef NDEBUG
+    log_print("Poll error: %s\n", strerror(errno));
+    #endif
+  }
+  else if (rc == 0)
+  {
+    #ifndef NDEBUG
+    log_print("Poll error: Timeout exceeded\n");
+    #endif
+    return 0;
+  }
+  else if (fds.revents & POLLHUP)
+  {
+    #ifndef NDEBUG
+    log_print("Poll info: Connection was terminated\n");
+    #endif
+    return 0;
+  }
+  else if (fds.revents & POLLERR)
+  {
+    #ifndef NDEBUG
+    log_print("Poll info: POLLERR\n");
+    #endif
+    return 0;
+  }
+  else if (fds.revents & POLLIN)
+  {
+    #ifndef NDEBUG
+    log_print("Poll info: Data ready for read\n");
+    #endif
+  }
+
   ssize_t bytes_read;
   bytes_read = read(conn, buf, buf_size - 1);
   if (bytes_read > 0)

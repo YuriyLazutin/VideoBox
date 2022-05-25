@@ -6,6 +6,8 @@
 #define   ID_SIZE                 4
 #define   FLAGS_SIZE              4
 #define   SIG_SIZE                32
+#define   TOTAL_REQ_TIME_LIMIT    30000 // 30 sec
+#define   READ_BLOCK_TIME_LIMIT   5000 // 5 sec
 
 #define   TINY_BUFFER_SIZE        8
 #define   SMALL_BUFFER_SIZE       256
