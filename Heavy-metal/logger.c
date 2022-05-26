@@ -130,5 +130,7 @@ void log_print(char* format, ...)
   va_list ap;
   va_start(ap, format);
   vfprintf(fp, format, ap);
+  fflush(fp);
+  //fsync(log_fd);
   va_end(ap);
 }

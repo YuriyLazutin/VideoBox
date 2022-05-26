@@ -29,6 +29,7 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 void send_bad_request(const int conn);
+void send_request_timeout(const int conn);
 void send_bad_method(const int conn);
 char* showboard_dir;
 ssize_t showboard_dir_length;
@@ -197,6 +198,9 @@ int main()
       rc = process_connection(connection);
 
       close(connection);
+      #ifndef NDEBUG
+        log_close();
+      #endif
       return rc;
     }
     else if (child_pid > 0) // Parent
@@ -256,7 +260,9 @@ int process_connection(int conn)
     log_print("Received from client\n");
   #endif
   bytes_read = read_block(conn, buffer, sizeof(buffer));
-  if (bytes_read <= 0)
+  if (bytes_read == -1 * TIME_OUT)
+    iError = TIME_OUT;
+  else if (bytes_read < 0)
     iError = BAD_REQUEST;
   else if (bytes_read == 0)
     iError = CONNECTION_CLOSED;
@@ -321,6 +327,12 @@ int process_connection(int conn)
         log_print("Connection unexpectedly terminated.\n");
       #endif
       break;
+    case TIME_OUT:
+      send_request_timeout(conn);
+      #ifndef NDEBUG
+        log_print("Timeout exceeded.\n");
+      #endif
+      break;
     case BAD_REQUEST:
       send_bad_request(conn);
       #ifndef NDEBUG
@@ -373,34 +385,34 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
   if (rc == -1)
   {
     #ifndef NDEBUG
-    log_print("Poll error: %s\n", strerror(errno));
+      log_print("Poll error: %s\n", strerror(errno));
     #endif
   }
   else if (rc == 0)
   {
     #ifndef NDEBUG
-    log_print("Poll error: Timeout exceeded\n");
+      log_print("Poll error: Timeout exceeded\n");
     #endif
-    return 0;
+    return -1 * TIME_OUT;
   }
   else if (fds.revents & POLLHUP)
   {
     #ifndef NDEBUG
-    log_print("Poll info: Connection was terminated\n");
+      log_print("Poll info: Connection was terminated\n");
     #endif
-    return 0;
+    return 0; // ?
   }
   else if (fds.revents & POLLERR)
   {
     #ifndef NDEBUG
-    log_print("Poll info: POLLERR\n");
+      log_print("Poll info: POLLERR\n");
     #endif
-    return 0;
+    return 0; // ?
   }
   else if (fds.revents & POLLIN)
   {
     #ifndef NDEBUG
-    log_print("Poll info: Data ready for read\n");
+      log_print("Poll info: Data ready for read\n");
     #endif
   }
 
@@ -410,20 +422,20 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
   {
     *(buf + bytes_read) = '\0';
     #ifndef NDEBUG
-    log_print("%s", buf);
+      log_print("%s", buf);
     #endif
   }
   else if (bytes_read == 0)
   {
     #ifndef NDEBUG
-    log_print("Connection terminated without sending any data\n");
+      log_print("Connection terminated without sending any data\n");
     #endif
   }
   else // (bytes_read == -1)
   {
     #ifndef NDEBUG
-    log_print("Error in function \"read\": %s\n", strerror(errno));
-    log_print("Connection unexpectedly terminated\n");
+      log_print("Error in function \"read\": %s\n", strerror(errno));
+      log_print("Connection unexpectedly terminated\n");
     #endif
   }
   return bytes_read;
@@ -644,6 +656,26 @@ void send_bad_request(const int conn)
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", bad_request_response);
+  #endif
+}
+
+void send_request_timeout(const int conn)
+{
+  char* timeout_response =
+    "HTTP/1.1 408 Request Timeout\n"
+    "Content-type: text/html\n"
+    "\n"
+    "<html>\n"
+    " <body>\n"
+    "  <h1>Request Timeout</h1>\n"
+    "  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>\n"
+    " </body>\n"
+    "</html>\n";
+
+  write(conn, timeout_response, strlen(timeout_response));
+  #ifndef NDEBUG
+    log_print("Sended to client:\n");
+    log_print("%s", timeout_response);
   #endif
 }
 
