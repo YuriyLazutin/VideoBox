@@ -26,5 +26,6 @@
 #define   READ_FILE_ERROR        9
 #define   READ_LINK_ERROR       10
 #define   TIME_OUT              11
+#define   READ_BLOCK_ERROR      12
 
 #endif // DEFINES_H

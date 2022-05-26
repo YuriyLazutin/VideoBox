@@ -5,7 +5,7 @@ void log_init(char* path)
   int errcode;
   mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 
-  log_fd = open(path, O_WRONLY | O_CREAT, mode);
+  log_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
   if (log_fd == -1)
   {
     errcode = errno;
@@ -21,8 +21,7 @@ void log_init(char* path)
       }
 
       ssize_t length = strlen(dir_path);
-      while (length > 0 && dir_path[length - 1] != '/')
-        length--;
+      while (length > 0 && dir_path[length - 1] != '/') length--;
       dir_path[length] = '\0';
 
       mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
@@ -39,7 +38,7 @@ void log_init(char* path)
       else
         fprintf(stderr, "\"log_init\". Create log directory: successfully\n");
 
-      log_fd = open(path, O_WRONLY | O_CREAT, mode);
+      log_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, mode);
       if (log_fd == -1)
       {
         errcode = errno;
