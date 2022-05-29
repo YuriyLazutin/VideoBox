@@ -156,7 +156,14 @@ int mk_boardernote(char** result, const char* href, const char* trumb_file, cons
 
 int showboard(int conn)
 {
-  write(conn, page_begin, strlen(page_begin));
+  ssize_t wcnt = write(conn, page_begin, strlen(page_begin));
+  if (wcnt == -1)
+  {
+    #ifndef NDEBUG
+      log_print("write error: %s", strerror(errno));
+    #endif
+  }
+
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", page_begin);
@@ -216,7 +223,14 @@ int showboard(int conn)
           rc2 = mk_boardernote(&brdnote, href, trumb, title, descr);
           if (rc2 == EXIT_SUCCESS)
           {
-            write(conn, brdnote, strlen(brdnote));
+            wcnt = write(conn, brdnote, strlen(brdnote));
+            if (wcnt == -1)
+            {
+              #ifndef NDEBUG
+                log_print("write error: %s", strerror(errno));
+              #endif
+            }
+
             #ifndef NDEBUG
               log_print("%s", brdnote);
             #endif

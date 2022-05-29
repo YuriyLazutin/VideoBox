@@ -300,15 +300,20 @@ int process_connection(int conn)
   }
 
   if (iError == NO_ERRORS)
+  {
     iError = read_str(conn, "\r\n\r\n", buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+    int slen = strlen("\r\n\r\n");
+    pos += slen;
+    bytes_read -= slen;
+  }
 
   if (iError == NO_ERRORS)
-  {
-    process_get(conn, request);
-    #ifndef NDEBUG
+    iError = process_get(conn, request);
+
+  #ifndef NDEBUG
+  if (iError == NO_ERRORS)
     read_tail(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-    #endif
-  }
+  #endif
 
   if (method)
     free(method);
@@ -361,7 +366,7 @@ int process_connection(int conn)
 
 int process_get(int conn, const char* page)
 {
-  int rc = EXIT_SUCCESS;
+  int rc = NO_ERRORS;
   char* v;
 
   if ((v = strstr(page, "?play=")))
@@ -409,13 +414,8 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
     #endif
     return 0; // ?
   }
-  else if (fds.revents & POLLIN)
-  {
-    #ifndef NDEBUG
-      log_print("Poll info: Data ready for read\n");
-    #endif
-  }
 
+  // fds.revents & POLLIN
   ssize_t bytes_read;
   bytes_read = read(conn, buf, buf_size - 1);
   if (bytes_read > 0)
@@ -628,9 +628,10 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
 
     total_read += *bytes_read;
     *pos = buf;
+    *bytes_read += m;
   }
 
-  *bytes_read = *bytes_read + i - (pstr - *pos);
+  *bytes_read = *bytes_read - (pstr - *pos);
   *pos = pstr;
   return NO_ERRORS;
 }
