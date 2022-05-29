@@ -25,6 +25,7 @@ void clean_up_child_process(int);
 int process_connection(int conn);
 int process_get(int conn, const char* page);
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
+ssize_t write_block(const int conn, const char* buf, const ssize_t count);
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
@@ -381,12 +382,13 @@ int process_get(int conn, const char* page)
 
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
 {
+  ssize_t bytes_read = 0;
   struct pollfd fds;
   fds.fd = conn;
   fds.events = POLLIN;
   fds.revents = 0;
 
-  int rc = poll(&fds, 1, READ_BLOCK_TIME_LIMIT); // Wait 5 sec
+  int rc = poll(&fds, 1, READ_BLOCK_TIME_LIMIT);
   if (rc == -1)
   {
     #ifndef NDEBUG
@@ -405,7 +407,7 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
     #ifndef NDEBUG
       log_print("Poll info: Connection was terminated\n");
     #endif
-    return 0; // ?
+    return -1 * CONNECTION_CLOSED;
   }
   else if (fds.revents & POLLERR)
   {
@@ -414,31 +416,96 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
     #endif
     return 0; // ?
   }
-
-  // fds.revents & POLLIN
-  ssize_t bytes_read;
-  bytes_read = read(conn, buf, buf_size - 1);
-  if (bytes_read > 0)
+  else if (fds.revents & POLLIN)
   {
-    *(buf + bytes_read) = '\0';
-    #ifndef NDEBUG
-      log_print("%s", buf);
-    #endif
-  }
-  else if (bytes_read == 0)
-  {
-    #ifndef NDEBUG
-      log_print("Connection terminated\n");
-    #endif
-  }
-  else // (bytes_read == -1)
-  {
-    #ifndef NDEBUG
-      log_print("Error in function \"read\": %s\n", strerror(errno));
-      log_print("Connection unexpectedly terminated\n");
-    #endif
+    bytes_read = read(conn, buf, buf_size - 1);
+    if (bytes_read > 0)
+    {
+      *(buf + bytes_read) = '\0';
+      #ifndef NDEBUG
+        log_print("%s", buf);
+      #endif
+    }
+    else if (bytes_read == 0)
+    {
+      #ifndef NDEBUG
+        log_print("Connection terminated\n");
+      #endif
+    }
+    else // (bytes_read == -1)
+    {
+      #ifndef NDEBUG
+        log_print("Error in function \"read\": %s\n", strerror(errno));
+        log_print("Connection unexpectedly terminated\n");
+      #endif
+    }
   }
   return bytes_read;
+}
+
+ssize_t write_block(const int conn, const char* buf, const ssize_t count)
+{
+  ssize_t bytes_wrote;
+  struct pollfd fds;
+  fds.fd = conn;
+  fds.events = POLLOUT;
+  fds.revents = 0;
+
+  int rc = poll(&fds, 1, WRITE_BLOCK_TIME_LIMIT);
+  if (rc == -1)
+  {
+    #ifndef NDEBUG
+      log_print("write_block->Poll error: %s\n", strerror(errno));
+    #endif
+  }
+  else if (rc == 0)
+  {
+    #ifndef NDEBUG
+      log_print("write_block->Poll error: Timeout exceeded\n");
+    #endif
+    return -1 * TIME_OUT;
+  }
+  else if (fds.revents & POLLHUP)
+  {
+    #ifndef NDEBUG
+      log_print("write_block->Poll info: Connection was terminated\n");
+    #endif
+    return -1 * CONNECTION_CLOSED;
+  }
+  else if (fds.revents & POLLERR)
+  {
+    #ifndef NDEBUG
+      log_print("write_block->Poll info: POLLERR\n");
+    #endif
+    return 0; // ?
+  }
+  else if (fds.revents & POLLOUT)
+  {
+    bytes_wrote = write(conn, buf, count);
+    if (bytes_wrote > 0)
+    {
+      //*(buf + bytes_read) = '\0';
+      //#ifndef NDEBUG
+      //  log_print("%s", buf);
+      //#endif
+    }
+    else if (bytes_wrote == 0)
+    {
+      #ifndef NDEBUG
+        log_print("write_block->Connection terminated\n");
+        return -1 * CONNECTION_CLOSED;
+      #endif
+    }
+    else // (bytes_wrote == -1)
+    {
+      #ifndef NDEBUG
+        log_print("write_block->Error in function \"write\": %s\n", strerror(errno));
+        log_print("write_block->Connection unexpectedly terminated\n");
+      #endif
+      return -1 * WRITE_BLOCK_ERROR;
+    }
+  }
+  return bytes_wrote;
 }
 
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)

@@ -156,20 +156,19 @@ int mk_boardernote(char** result, const char* href, const char* trumb_file, cons
 
 int showboard(int conn)
 {
-  ssize_t wcnt = write(conn, page_begin, strlen(page_begin));
-  if (wcnt == -1)
-  {
-    #ifndef NDEBUG
-      log_print("write error: %s", strerror(errno));
-    #endif
-  }
+  int rc;
+  ssize_t wcnt;
+
+  rc = strlen(page_begin);
+  wcnt = write_block(conn, page_begin, rc);
+  if (wcnt <= 0)
+    return -1 * wcnt;
 
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", page_begin);
   #endif
 
-  int rc = EXIT_SUCCESS, rc2;
   ssize_t sig_length, id_length, entry_length;
   char path[PATH_MAX];
   DIR *brd_dir, *id_dir;
@@ -214,22 +213,19 @@ int showboard(int conn)
           path[id_length - 1] = '/';
           path[id_length] = '\0';
 
-          if ( (rc2 = mk_href(href, path, id_length)) != EXIT_SUCCESS) // Can't find video.mp4 or video.webm or path overflow
+          if ( (rc = mk_href(href, path, id_length)) != EXIT_SUCCESS) // Can't find video.mp4 or video.webm or path overflow
             continue;
           mk_trumb(trumb, path, id_length);
           mk_title(title, path, id_length);
           mk_descr(descr, path, id_length);
 
-          rc2 = mk_boardernote(&brdnote, href, trumb, title, descr);
-          if (rc2 == EXIT_SUCCESS)
+          rc = mk_boardernote(&brdnote, href, trumb, title, descr);
+          if (rc == EXIT_SUCCESS)
           {
-            wcnt = write(conn, brdnote, strlen(brdnote));
-            if (wcnt == -1)
-            {
-              #ifndef NDEBUG
-                log_print("write error: %s", strerror(errno));
-              #endif
-            }
+            rc = strlen(brdnote);
+            wcnt = write_block(conn, brdnote, rc);
+            if (wcnt <= 0)
+              return -1 * wcnt;
 
             #ifndef NDEBUG
               log_print("%s", brdnote);
@@ -245,12 +241,16 @@ int showboard(int conn)
   if (brdnote)
     free(brdnote);
 
-  write(conn, page_end, strlen(page_end));
+  rc = strlen(page_end);
+  wcnt = write_block(conn, page_end, rc);
+  if (wcnt <= 0)
+    return -1 * wcnt;
+
   #ifndef NDEBUG
     log_print("%s", page_end);
   #endif
 
-  return rc;
+  return EXIT_SUCCESS;
 }
 
 int test_file(char* path)
