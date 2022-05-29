@@ -1,16 +1,21 @@
-videobox: videobox.o player.o pump.o showboard.o
-	gcc $(CFLAGS) -o videobox videobox.o player.o pump.o showboard.o
+.PHONY: all clean
 
-player.o: player.c player.h
+videobox: videobox.o player.o pump.o showboard.o logger.o
+	gcc $(CFLAGS) -o videobox videobox.o player.o pump.o showboard.o logger.o
+
+logger.o: logger.c logger.h defines.h
+	gcc $(CFLAGS) -c logger.c
+
+player.o: player.c player.h defines.h
 	gcc $(CFLAGS) -c player.c
 
-pump.o: pump.c pump.h
+pump.o: pump.c pump.h defines.h
 	gcc $(CFLAGS) -c pump.c
 
-showboard.o: showboard.c showboard.h
+showboard.o: showboard.c showboard.h defines.h
 	gcc $(CFLAGS) -c showboard.c
 
-videobox.o: videobox.c
+videobox.o: videobox.c defines.h
 	gcc $(CFLAGS) -c videobox.c
 
 clean:
