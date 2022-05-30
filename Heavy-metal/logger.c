@@ -113,8 +113,37 @@ void connection_log_init(int connection_id)
 
 void log_close()
 {
+  int rc, attempts = 0;
+
   if (log_fd != STDERR_FILENO && log_fd != STDOUT_FILENO)
-    close(log_fd);
+  {
+    do
+    {
+      rc = close(log_fd);
+      if (rc == -1)
+      {
+        switch (errno)
+        {
+          case EINTR:               // The system call was interrupted by a signal.
+            sleep(++attempts);
+            continue;
+          default:
+          /*
+            EBADF:                 fd isn't a valid open file descriptor.
+            EIO:                   An I/O error occurred.
+            ENOSPC, EDQUOT:        On NFS, these errors are not normally reported against the first write which exceeds the available storage space,
+                                   but instead against a subsequent write(), fsync(), or close().
+          */
+          fprintf(stderr, "Error in function \"log_close()->close\": %s\nRepeat close(log_fd) after pause\n", strerror(errno));
+          sleep(++attempts);
+        }
+      }
+    }
+    while (rc != 0 && attempts < 5);
+
+    if (attempts == 5)
+      fprintf(stderr, "Tried to close(log_fd), but all attempts failed.\n");
+  }
 }
 
 void log_print(char* format, ...)

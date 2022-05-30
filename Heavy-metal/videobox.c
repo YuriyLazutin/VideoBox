@@ -22,6 +22,7 @@
 
 // catch SIGCHLD
 void clean_up_child_process(int);
+int close_connection(int conn);
 int process_connection(int conn);
 int process_get(int conn, const char* page);
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
@@ -130,15 +131,11 @@ int main()
     int connection = accept(server_socket, (struct sockaddr *)&remote_address, &address_length);
     if (connection == -1)
     {
-      int errcode = errno;
-      #ifndef NDEBUG
-        log_print("Error in function \"accept\": %s\n", strerror(errcode));
-      #else
-      fprintf(stderr, "Error in function \"accept\": %s\n", strerror(errcode));
-      #endif
-
-      switch (errcode)
+      switch (errno)
       {
+        case EINTR:               // The system call was interrupted by a signal.
+          continue;
+
         // Critical errors (shutdown server)
         case EBADF:             // invalid descriptor. server_socket is not an open file descriptor.
         case EINVAL:            // Socket is not listening for connections, or address_length is invalid
@@ -150,6 +147,11 @@ int main()
           case ESOCKTNOSUPPORT:   // Socket type not supported
           case EPROTONOSUPPORT:   // Protocol not supported
         */
+          #ifndef NDEBUG
+            log_print("Critical error in function \"accept\": %s\n", strerror(errno));
+          #else
+            fprintf(stderr, "Critical error in function \"accept\": %s\n", strerror(errno));
+          #endif
           rc = EXIT_FAILURE;
           continue;
 
@@ -158,7 +160,6 @@ int main()
           EAGAIN, EWOULDBLOCK:   The socket is marked nonblocking and no connections are present to be accepted.
           ECONNABORTED:          A connection has been aborted.
           EFAULT:                The remote_address argument is not in a writable part of the user address space.
-          EINTR:                 The system call was interrupted by a signal.
           EMFILE:                The per-process limit on the number of open file descriptors has been reached.
           ENFILE:                The system-wide limit on the total number of open files has been reached.
           ENOBUFS, ENOMEM:       Not enough free memory.  This often means that the memory allocation is limited by the socket buffer limits, not by the system memory.
@@ -169,6 +170,11 @@ int main()
           ENOSR:                 Out of streams resources
           ETIMEDOUT:             Connection timed out
         */
+          #ifndef NDEBUG
+            log_print("Non-critical error in function \"accept\": %s\nRepeat accept after pause\n", strerror(errno));
+          #else
+            fprintf(stderr, "Non-critical error in function \"accept\": %s\nRepeat accept after pause\n", strerror(errno));
+          #endif
           sleep(1);
           continue;
 
@@ -198,24 +204,21 @@ int main()
 
       rc = process_connection(connection);
 
-      close(connection);
-      #ifndef NDEBUG
-        log_close();
-      #endif
-      return rc;
+      close_connection(connection);
+      break;
     }
     else if (child_pid > 0) // Parent
     {
-      close(connection);
+      close_connection(connection);
     }
     else // fork() failed
     {
-      close(connection);
       #ifndef NDEBUG
         log_print("Error in function \"fork\": %s\n", strerror(errno));
       #else
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
       #endif
+      close_connection(connection);
       rc = EXIT_FAILURE;
     }
   } while (rc == EXIT_SUCCESS);
@@ -235,11 +238,49 @@ void clean_up_child_process(int signal_number)
 {
   #ifndef NDEBUG
     log_print("Received signal: %d\n", signal_number);
-  #else
-  fprintf(stderr, "Received signal: %d\n", signal_number);
   #endif
   int status;
   wait(&status);
+}
+
+int close_connection(int conn)
+{
+  int rc, attempts = 0;
+  do
+  {
+    rc = close(conn);
+    if (rc == -1)
+    {
+      switch (errno)
+      {
+        case EINTR:               // The system call was interrupted by a signal.
+          sleep(++attempts);
+          continue;
+        default:
+        /*
+          EBADF:                 fd isn't a valid open file descriptor.
+          EIO:                   An I/O error occurred.
+          ENOSPC, EDQUOT:        On NFS, these errors are not normally reported against the first write which exceeds the available storage space,
+                                 but instead against a subsequent write(), fsync(), or close().
+        */
+          #ifndef NDEBUG
+            log_print("Error in function \"close\": %s\nRepeat close(connection) after pause\n", strerror(errno));
+          #endif
+          sleep(++attempts);
+      }
+    }
+  }
+  while (rc != 0 && attempts < 5);
+
+  if (attempts == 5)
+  {
+    #ifndef NDEBUG
+      log_print("Tried to close(connection), but all attempts failed.\n");
+    #endif
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
 }
 
 int process_connection(int conn)
