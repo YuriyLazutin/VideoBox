@@ -29,6 +29,7 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
 ssize_t write_block(const int conn, const char* buf, const ssize_t count);
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
+char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 void send_bad_request(const int conn);
 void send_request_timeout(const int conn);
@@ -680,6 +681,89 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
   if (result)
     *(result + word_len) = '\0';
+  return result;
+}
+
+char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
+{
+  char* result = NULL;
+  ssize_t total_read = 0, cnt;
+
+  while (**pos != '\n')
+  {
+    cnt = 0;
+    do
+    {
+      (*pos)++;
+      cnt++;
+    }
+    while (cnt < *bytes_read && **pos != '\n');
+
+    total_read += cnt;
+
+    if (total_read + 1 > read_limit)
+    {
+      if (result)
+        free(result);
+      #ifndef NDEBUG
+      log_print("Limit exceeded while read_line\n");
+      #endif
+      *bytes_read -= cnt;
+      return NULL;
+    }
+
+    result = realloc(result, total_read + 1);
+    if (!result)
+    {
+      #ifndef NDEBUG
+        log_print("Realloc filed while read_line\n");
+      #endif
+      return NULL;
+    }
+    memcpy(result + total_read - cnt, *pos - cnt, cnt);
+
+    if (cnt == *bytes_read)
+    {
+      *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read == -1 * TIME_OUT)
+      {
+        #ifndef NDEBUG
+          log_print("Time out while read_line\n");
+        #endif
+        if (result)
+          free(result);
+        return NULL;
+      }
+      else if (*bytes_read < 0)
+      {
+        #ifndef NDEBUG
+          log_print("Read block error while read_line\n");
+        #endif
+        if (result)
+          free(result);
+        return NULL;
+      }
+      else if (*bytes_read == 0)
+      {
+        #ifndef NDEBUG
+          log_print("read_line: received 0 bytes\n");
+        #endif
+        if (result)
+          free(result);
+        break;
+      }
+      *pos = buf;
+    }
+    else
+      *bytes_read -= cnt;
+  }
+
+  if (result)
+  {
+    if (result[total_read] == '\r')
+      total_read--;
+    *(result + total_read) = '\0';
+  }
   return result;
 }
 
