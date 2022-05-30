@@ -28,7 +28,8 @@
 #define   READ_FILE_ERROR        9
 #define   READ_LINK_ERROR       10
 #define   TIME_OUT              11
-#define   READ_BLOCK_ERROR      12
-#define   WRITE_BLOCK_ERROR     13
+#define   POLL_ERROR            12
+#define   READ_BLOCK_ERROR      13
+#define   WRITE_BLOCK_ERROR     14
 
 #endif // DEFINES_H

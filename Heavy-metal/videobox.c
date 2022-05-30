@@ -31,6 +31,7 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
+int parse_param_line(const char* str);
 void send_bad_request(const int conn);
 void send_request_timeout(const int conn);
 void send_bad_method(const int conn);
@@ -301,10 +302,8 @@ int process_connection(int conn)
     log_print("Received from client\n");
   #endif
   bytes_read = read_block(conn, buffer, sizeof(buffer));
-  if (bytes_read == -1 * TIME_OUT)
-    iError = TIME_OUT;
-  else if (bytes_read < 0)
-    iError = BAD_REQUEST;
+  if (bytes_read < 0)
+    iError = -bytes_read;
   else if (bytes_read == 0)
     iError = CONNECTION_CLOSED;
 
@@ -342,11 +341,37 @@ int process_connection(int conn)
 
   if (iError == NO_ERRORS)
   {
+    char* strline = NULL;
+    size_t len = 0;
+
+    do
+    {
+      strline = read_line(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+      if (!strline && bytes_read == 0)
+        iError = CONNECTION_CLOSED;
+      else if (!strline) // ???
+        iError = BAD_REQUEST;
+
+      if (iError == NO_ERRORS)
+      {
+        len = strlen(strline);
+        if (len > 0)
+          iError = parse_param_line(strline);
+      }
+
+      if (strline)
+        free(strline);
+    }
+    while (iError == NO_ERRORS && len > 0);
+  }
+
+  /*if (iError == NO_ERRORS)
+  {
     iError = read_str(conn, "\r\n\r\n", buffer, sizeof(buffer), &pos, &bytes_read, 32000);
     int slen = strlen("\r\n\r\n");
     pos += slen;
     bytes_read -= slen;
-  }
+  }*/
 
   if (iError == NO_ERRORS)
     iError = process_get(conn, request);
@@ -432,53 +457,56 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
   if (rc == -1)
   {
     #ifndef NDEBUG
-      log_print("Poll error: %s\n", strerror(errno));
+      log_print("read_block: poll error (%s)\n", strerror(errno));
     #endif
   }
   else if (rc == 0)
   {
     #ifndef NDEBUG
-      log_print("Poll error: Timeout exceeded\n");
+      log_print("read_block: poll error (Timeout exceeded)\n");
     #endif
     return -1 * TIME_OUT;
   }
   else if (fds.revents & POLLHUP)
   {
     #ifndef NDEBUG
-      log_print("Poll info: Connection was terminated\n");
+      log_print("read_block: poll info (Connection was terminated)\n");
     #endif
     return -1 * CONNECTION_CLOSED;
   }
   else if (fds.revents & POLLERR)
   {
     #ifndef NDEBUG
-      log_print("Poll info: POLLERR\n");
+      log_print("read_block: poll info (POLLERR)\n");
     #endif
-    return 0; // ?
+    return -1 * POLL_ERROR;
   }
   else if (fds.revents & POLLIN)
   {
     bytes_read = read(conn, buf, buf_size - 1);
-    if (bytes_read > 0)
-    {
-      *(buf + bytes_read) = '\0';
-      #ifndef NDEBUG
-        log_print("%s", buf);
-      #endif
-    }
-    else if (bytes_read == 0)
+    if (bytes_read == 0)
     {
       #ifndef NDEBUG
-        log_print("Connection terminated\n");
+        log_print("read_block: Readed 0 bytes. Connection terminated\n");
       #endif
+      return -1 * CONNECTION_CLOSED;
     }
-    else // (bytes_read == -1)
+    else if (bytes_read == -1)
     {
       #ifndef NDEBUG
-        log_print("Error in function \"read\": %s\n", strerror(errno));
-        log_print("Connection unexpectedly terminated\n");
+        log_print("read_block: Error in function \"read\" (%s)\n", strerror(errno));
+        log_print("read_block: Connection unexpectedly terminated\n");
       #endif
+      return -1 * READ_BLOCK_ERROR;
     }
+  }
+
+  if (bytes_read > 0)
+  {
+    *(buf + bytes_read) = '\0';
+    #ifndef NDEBUG
+      log_print("%s", buf);
+    #endif
   }
   return bytes_read;
 }
@@ -495,52 +523,45 @@ ssize_t write_block(const int conn, const char* buf, const ssize_t count)
   if (rc == -1)
   {
     #ifndef NDEBUG
-      log_print("write_block->Poll error: %s\n", strerror(errno));
+      log_print("write_block: poll error (%s)\n", strerror(errno));
     #endif
   }
   else if (rc == 0)
   {
     #ifndef NDEBUG
-      log_print("write_block->Poll error: Timeout exceeded\n");
+      log_print("write_block: poll error (Timeout exceeded)\n");
     #endif
     return -1 * TIME_OUT;
   }
   else if (fds.revents & POLLHUP)
   {
     #ifndef NDEBUG
-      log_print("write_block->Poll info: Connection was terminated\n");
+      log_print("write_block: poll info (Connection was terminated)\n");
     #endif
     return -1 * CONNECTION_CLOSED;
   }
   else if (fds.revents & POLLERR)
   {
     #ifndef NDEBUG
-      log_print("write_block->Poll info: POLLERR\n");
+      log_print("write_block: poll info (POLLERR)\n");
     #endif
-    return 0; // ?
+    return -1 * POLL_ERROR;
   }
   else if (fds.revents & POLLOUT)
   {
     bytes_wrote = write(conn, buf, count);
-    if (bytes_wrote > 0)
-    {
-      //*(buf + bytes_read) = '\0';
-      //#ifndef NDEBUG
-      //  log_print("%s", buf);
-      //#endif
-    }
-    else if (bytes_wrote == 0)
+    if (bytes_wrote == 0)
     {
       #ifndef NDEBUG
-        log_print("write_block->Connection terminated\n");
+        log_print("write_block: Wrote 0 bytes. Connection terminated\n");
         return -1 * CONNECTION_CLOSED;
       #endif
     }
-    else // (bytes_wrote == -1)
+    else if (bytes_wrote == -1)
     {
       #ifndef NDEBUG
-        log_print("write_block->Error in function \"write\": %s\n", strerror(errno));
-        log_print("write_block->Connection unexpectedly terminated\n");
+        log_print("write_block: Error in function \"write\" (%s)\n", strerror(errno));
+        log_print("write_block: Connection unexpectedly terminated\n");
       #endif
       return -1 * WRITE_BLOCK_ERROR;
     }
@@ -926,6 +947,20 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
   // End of Just for test
 }
 #endif
+
+int parse_param_line(const char* str)
+{
+  int iError = NO_ERRORS;
+  // Range: bytes=0-
+  // Content-Length: 644854499
+  // sendfile sended less bytes then requested (63 392 579 < 644854499)
+  // Range: bytes=98729984-
+  // Content-Length: 644854499
+  // sendfile sended less bytes then requested (124 829 897 < 644854499)
+
+  //strcasestr()
+  return iError;
+}
 
 void send_bad_request(const int conn)
 {
