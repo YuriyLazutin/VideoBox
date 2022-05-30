@@ -139,9 +139,9 @@ void log_close()
         }
       }
     }
-    while (rc != 0 && attempts < 5);
+    while (rc != 0 && attempts < MAX_CLOSE_DESCRIPTOR_ATTEMPTS);
 
-    if (attempts == 5)
+    if (attempts == MAX_CLOSE_DESCRIPTOR_ATTEMPTS)
       fprintf(stderr, "Tried to close(log_fd), but all attempts failed.\n");
   }
 }

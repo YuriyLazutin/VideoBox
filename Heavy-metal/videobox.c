@@ -22,7 +22,7 @@
 
 // catch SIGCHLD
 void clean_up_child_process(int);
-int close_connection(int conn);
+int close_descriptor(int d);
 int process_connection(int conn);
 int process_get(int conn, const char* page);
 ssize_t read_block(const int conn, char* buf, const ssize_t buf_size);
@@ -94,12 +94,10 @@ int main()
 
   const int on = 1;
   int rc = setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+  #ifndef NDEBUG
   if (rc == -1)
-  {
-    #ifndef NDEBUG
-      log_print("Error in function \"setsockopt\": %s\n", strerror(errno));
-    #endif
-  }
+    log_print("Error in function \"setsockopt\": %s\n", strerror(errno));
+  #endif
 
   rc = bind(server_socket, (const struct sockaddr *)&server_address, sizeof(server_address));
   if (rc != 0)
@@ -193,9 +191,9 @@ int main()
     if (child_pid == 0) // Child
     {
       // Close descriptors stdin, stdout, server_socket
-      close(STDIN_FILENO);
-      close(STDOUT_FILENO);
-      close(server_socket);
+      close_descriptor(STDIN_FILENO);
+      close_descriptor(STDOUT_FILENO);
+      close_descriptor(server_socket);
       #ifndef NDEBUG
         // Close server log descriptor and open connection log descriptor
         log_close();
@@ -204,12 +202,12 @@ int main()
 
       rc = process_connection(connection);
 
-      close_connection(connection);
+      close_descriptor(connection);
       break;
     }
     else if (child_pid > 0) // Parent
     {
-      close_connection(connection);
+      close_descriptor(connection);
     }
     else // fork() failed
     {
@@ -218,7 +216,7 @@ int main()
       #else
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
       #endif
-      close_connection(connection);
+      close_descriptor(connection);
       rc = EXIT_FAILURE;
     }
   } while (rc == EXIT_SUCCESS);
@@ -243,12 +241,12 @@ void clean_up_child_process(int signal_number)
   wait(&status);
 }
 
-int close_connection(int conn)
+int close_descriptor(int d)
 {
   int rc, attempts = 0;
   do
   {
-    rc = close(conn);
+    rc = close(d);
     if (rc == -1)
     {
       switch (errno)
@@ -264,18 +262,18 @@ int close_connection(int conn)
                                  but instead against a subsequent write(), fsync(), or close().
         */
           #ifndef NDEBUG
-            log_print("Error in function \"close\": %s\nRepeat close(connection) after pause\n", strerror(errno));
+            log_print("Error in function \"close_descriptor(%d)\": %s\nRepeat close(descriptor) after pause\n", d, strerror(errno));
           #endif
           sleep(++attempts);
       }
     }
   }
-  while (rc != 0 && attempts < 5);
+  while (rc != 0 && attempts < MAX_CLOSE_DESCRIPTOR_ATTEMPTS);
 
-  if (attempts == 5)
+  if (attempts == MAX_CLOSE_DESCRIPTOR_ATTEMPTS)
   {
     #ifndef NDEBUG
-      log_print("Tried to close(connection), but all attempts failed.\n");
+      log_print("Tried to close_descriptor(%d), but all attempts failed.\n", d);
     #endif
     return EXIT_FAILURE;
   }
