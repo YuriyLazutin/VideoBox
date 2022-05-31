@@ -31,7 +31,7 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
-int parse_param_line(const char* str);
+int parse_param_line(char* str);
 char* find_str_ncase(const char* buf, const char* str);
 void send_bad_request(const int conn);
 void send_request_timeout(const int conn);
@@ -41,11 +41,11 @@ ssize_t showboard_dir_length;
 
 struct block_range
 {
-  size_t start;
-  size_t end;
+  ssize_t start;
+  ssize_t end;
   struct block_range* pNext;
 
-} *blcks;
+} *blocks;
 
 int main()
 {
@@ -231,6 +231,14 @@ int main()
       rc = EXIT_FAILURE;
     }
   } while (rc == EXIT_SUCCESS);
+
+  struct block_range *pbr = blocks;
+  while (blocks)
+  {
+    pbr = blocks->pNext;
+    free(blocks);
+    blocks = pbr;
+  }
 
   if (showboard_dir)
     free(showboard_dir);
@@ -957,40 +965,73 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
 }
 #endif
 
-int parse_param_line(const char* str)
+int parse_param_line(char* str)
 {
-  int iError = NO_ERRORS;
-  char* pos = (char*)str;
-  // Range: bytes=0-
-  // Content-Length: 644854499
-  // sendfile sended less bytes then requested (63 392 579 < 644854499)
-  // Range: bytes=98729984-
-  // Content-Length: 644854499
-  // sendfile sended less bytes then requested (124 829 897 < 644854499)
+  int rc;
+  char* saveptr;
 
-  //strcasestr()
-
-//  struct block_range
-//{
-//  size_t start;
-//  size_t end;
-//  struct block_range* pNext;
-//} *blcks;
-  while (*pos == ' ') pos++;
-  pos = find_str_ncase(pos, "Range:");
-  if (pos)
+  while (*str == ' ') str++;
+  saveptr = str;
+  str = find_str_ncase(str, "Range:");
+  if (str && saveptr == str)
   {
-    pos += 6; // strlen("Range:")
-    while (*pos == ' ') pos++;
-    pos = find_str_ncase(pos, "bytes=");
-    if (pos)
+    str += 6; // strlen("Range:")
+    while (*str == ' ') str++;
+    saveptr = str;
+    str = find_str_ncase(str, "bytes=");
+    if (str && saveptr == str)
     {
+      str += 6; // strlen("bytes=")
+      while (*str == ' ') str++;
 
+      long start_pos;
+      long end_pos;
+      struct block_range *pbr, *tail;
+
+      char* token = strtok_r(str, ",", &saveptr);
+      while (token)
+      {
+        start_pos = end_pos = 0;
+
+        if ( strspn(token, "0123456789- ") == strlen(token) )
+        {
+          rc = sscanf(token, "%ld - %ld", &start_pos, &end_pos);
+          if (rc <= 0)
+            start_pos = end_pos = 0;
+
+          if ( !(start_pos == 0 && end_pos == 0) && !(start_pos < 0 && end_pos != 0) && (start_pos < end_pos || end_pos == 0) )
+          {
+            pbr = malloc(sizeof(struct block_range));
+            if (pbr)
+            {
+              pbr->start = start_pos;
+              pbr->end = end_pos;
+              pbr->pNext = NULL;
+              if (!blocks)
+                blocks = tail = pbr;
+              else
+              {
+                tail->pNext = pbr;
+                tail = pbr;
+              }
+            }
+            else
+              return MALLOC_FAILED;
+          }
+          // Currently will just ignore invalid ranges
+          // else if (!(start_pos == 0 && end_pos == 0) && ((start_pos >= end_pos && end_pos != 0) || (start_pos < 0 && end_pos != 0)))
+          //   return BAD_REQUEST;
+        }
+        // Currently will just ignore invalid ranges
+        // else
+        //  return BAD_REQUEST;
+
+        token = strtok_r(NULL, ",", &saveptr);
+      }
     }
   }
 
-
-  return iError;
+  return NO_ERRORS;
 }
 
 char* find_str_ncase(const char* buf, const char* str)
