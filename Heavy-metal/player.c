@@ -203,7 +203,7 @@ int player_show(int conn, const char* params)
       #endif
     }
     else
-      iError = MALLOC_FILED;
+      iError = MALLOC_FAILED;
   }
 
   if (iError == NO_ERRORS)

@@ -21,7 +21,7 @@
 #define   BAD_METHOD             2
 #define   NOT_FOUND              3
 #define   CONNECTION_CLOSED      4
-#define   MALLOC_FILED           5
+#define   MALLOC_FAILED          5
 #define   PATH_OVERFLOW          6
 #define   PATH_INVALID           7
 #define   OPEN_FILE_ERROR        8
