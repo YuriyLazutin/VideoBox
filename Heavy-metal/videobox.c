@@ -32,11 +32,20 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int parse_param_line(const char* str);
+char* find_str_ncase(const char* buf, const char* str);
 void send_bad_request(const int conn);
 void send_request_timeout(const int conn);
 void send_bad_method(const int conn);
 char* showboard_dir;
 ssize_t showboard_dir_length;
+
+struct block_range
+{
+  size_t start;
+  size_t end;
+  struct block_range* pNext;
+
+} *blcks;
 
 int main()
 {
@@ -951,6 +960,7 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
 int parse_param_line(const char* str)
 {
   int iError = NO_ERRORS;
+  char* pos = (char*)str;
   // Range: bytes=0-
   // Content-Length: 644854499
   // sendfile sended less bytes then requested (63 392 579 < 644854499)
@@ -959,7 +969,62 @@ int parse_param_line(const char* str)
   // sendfile sended less bytes then requested (124 829 897 < 644854499)
 
   //strcasestr()
+
+//  struct block_range
+//{
+//  size_t start;
+//  size_t end;
+//  struct block_range* pNext;
+//} *blcks;
+  while (*pos == ' ') pos++;
+  pos = find_str_ncase(pos, "Range:");
+  if (pos)
+  {
+    pos += 6; // strlen("Range:")
+    while (*pos == ' ') pos++;
+    pos = find_str_ncase(pos, "bytes=");
+    if (pos)
+    {
+
+    }
+  }
+
+
   return iError;
+}
+
+char* find_str_ncase(const char* buf, const char* str)
+{
+  int mx = 'a' < 'A' ? 'A' : 'a';
+  int inc = 'a' < 'A' ? 'A' - 'a' : 'a' - 'A';
+  char* pos = (char*)str;
+  char c1, c2;
+
+  while (*buf != '\0' && *pos != '\0')
+  {
+    c1 = *buf;
+    if (c1 >= mx && c1 < mx + inc)
+      c1 -= inc;
+    c2 = *pos;
+    if (c2 >= mx && c2 < mx + inc)
+      c2 -= inc;
+
+    if ( c1 == c2)
+      pos++;
+    else
+    {
+      buf -= pos - str;
+      pos = (char*)str;
+    }
+    buf++;
+  }
+
+  if (*pos == '\0')
+  {
+    buf -= pos - str;
+    return (char*)buf;
+  }
+  return NULL;
 }
 
 void send_bad_request(const int conn)
