@@ -20,6 +20,8 @@
 #endif
 
 extern char* showboard_dir;
+extern struct block_range *blocks;
+extern ssize_t write_block(const int conn, const char* buf, const ssize_t count);
 
 int pump(int conn, const char* params);
 
