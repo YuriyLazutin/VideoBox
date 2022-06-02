@@ -11,6 +11,7 @@ SOURCES += \
         videobox.c
 
 HEADERS += \
+    common.h \
     defines.h \
     logger.h \
     player.h \

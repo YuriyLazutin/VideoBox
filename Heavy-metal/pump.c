@@ -1,97 +1,7 @@
 #include "pump.h"
 
-void send_not_found(const int conn)
-{
-  char* not_found_response =
-    "HTTP/1.0 404 Not Found\n"
-    "Content-type: text/html\n"
-    "\n"
-    "<html>\n"
-    " <body>\n"
-    "  <h1>Not Found</h1>\n"
-    "  <p>The requested URL was not found.</p>\n"
-    " </body>\n"
-    "</html>\n";
-
-  int len = strlen(not_found_response);
-  ssize_t bytes_wrote = write_block(conn, not_found_response, len);
-
-  #ifndef NDEBUG
-    if (bytes_wrote == len)
-    {
-      log_print("send_not_found: Sended to client:\n");
-      log_print("%s", not_found_response);
-    }
-    else if (bytes_wrote > 0)
-    {
-      log_print("send_not_found: Not found response partially sended to client (%d bytes sended):\n", bytes_wrote);
-      log_print("%s", not_found_response);
-    }
-    else if (bytes_wrote == 0)
-      log_print("send_not_found: Tried to send Not found response but 0 bytes sended.\n");
-    else if (bytes_wrote == -1 * TIME_OUT)
-      log_print("send_not_found: Tried to send Not found response but TIME_OUT occursed.\n");
-    else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-      log_print("send_not_found: Tried to send Not found response but CONNECTION_CLOSED.\n");
-    else if (bytes_wrote == -1 * POLL_ERROR)
-      log_print("send_not_found: Tried to send Not found response but POLL_ERROR occursed.\n");
-    else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-      log_print("send_not_found: Tried to send Not found response but WRITE_BLOCK_ERROR occursed.\n");
-  #endif
-}
-
-void send_range_not_satisfiable(const int conn, long size)
-{
-  char* range_not_satisfiable_response_template =
-    "HTTP/1.1 416 Range Not Satisfiable\n"
-    "Content-Range: bytes */%lu\n";
-
-  int len = strlen(range_not_satisfiable_response_template);
-  int bufsize = len + 64;
-  char* buf = malloc(bufsize);
-  if (!buf)
-  {
-    #ifndef NDEBUG
-      log_print("send_range_not_satisfiable: malloc failed.\n");
-    #endif
-    return;
-  }
-
-  len = snprintf(buf, bufsize, range_not_satisfiable_response_template, size);
-  if (len < 0 || len >= bufsize)
-  {
-    #ifndef NDEBUG
-      log_print("send_range_not_satisfiable: snprintf failed.\n");
-    #endif
-    return;
-  }
-
-  len = strlen(buf);
-  ssize_t bytes_wrote = write_block(conn, buf, len);
-
-  #ifndef NDEBUG
-    if (bytes_wrote == len)
-    {
-      log_print("send_range_not_satisfiable: Sended to client:\n");
-      log_print("%s", buf);
-    }
-    else if (bytes_wrote > 0)
-    {
-      log_print("send_range_not_satisfiable: partially sended to client (%d bytes sended):\n", bytes_wrote);
-      log_print("%s", buf);
-    }
-    else if (bytes_wrote == 0)
-      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but 0 bytes sended.\n");
-    else if (bytes_wrote == -1 * TIME_OUT)
-      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but TIME_OUT occursed.\n");
-    else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but CONNECTION_CLOSED.\n");
-    else if (bytes_wrote == -1 * POLL_ERROR)
-      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but POLL_ERROR occursed.\n");
-    else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but WRITE_BLOCK_ERROR occursed.\n");
-  #endif
-}
+void send_not_found(const int conn);
+void send_range_not_satisfiable(const int conn, long size);
 
 /* PNG package
 HTTP/1.1 200 OK
@@ -138,13 +48,13 @@ static char* partial_head_template =
 static char* multipart_head =
 "HTTP/1.1 206 Partial Content\n"
 "Content-Type: multipart/byteranges; boundary=vbxseparatestring\n"
+"Content-Length: %lu\n"
 "\n";
 
 static char* multipart_part_head_template =
 "--vbxseparatestring\n"
 "Content-Type: %s\n"
 "Content-Range: bytes %lu-%lu/%lu\n"
-"Content-Length: %lu\n"
 "\n";
 
 static char* multipart_end =
@@ -254,51 +164,156 @@ int pump(int conn, const char* params)
   {
     rc2 = fstat(read_fd, &file_info);
     if (rc2 == -1)
+    {
+      #ifndef NDEBUG
+        log_print("pump->fstat: %s\n", strerror(errno));
+      #endif
       rc = EXIT_FAILURE;
+    }
   }
 
   char buf[STANDARD_BUFFER_SIZE];
-  if (rc == EXIT_SUCCESS)
+  if (!blocks) // send file as one block with 200 responce
   {
-    length = snprintf(buf, STANDARD_BUFFER_SIZE, head_template, file_info.st_size, mime_type);
-    if (length < 0 || length >= STANDARD_BUFFER_SIZE)
-      rc = EXIT_FAILURE;
-  }
-
-  if (rc == EXIT_SUCCESS)
-  {
-    write(conn, buf, length);
-    #ifndef NDEBUG
-      log_print("Sended to client:\n");
-      log_print("%s", buf);
-    #endif
-  }
-
-  if (rc == EXIT_SUCCESS)
-  {
-    off_t offset = 0;
-    rc2 = sendfile(conn, read_fd, &offset, file_info.st_size);
-    if (rc2 == -1)
+    if (rc == EXIT_SUCCESS)
     {
-      rc = EXIT_FAILURE;
+      length = snprintf(buf, STANDARD_BUFFER_SIZE, head_template, file_info.st_size, mime_type);
+      if (length < 0 || length >= STANDARD_BUFFER_SIZE)
+        rc = EXIT_FAILURE;
+    }
+
+    if (rc == EXIT_SUCCESS)
+    {
+      ssize_t bytes_wrote = write_block(conn, buf, length);
       #ifndef NDEBUG
-        log_print("Error: sendfile filed!\n");
+        if (bytes_wrote == length)
+        {
+          log_print("pump: Sended to client:\n");
+          log_print("%s", buf);
+        }
+        else if (bytes_wrote > 0)
+        {
+          log_print("pump: partially sended to client (%d bytes sended):\n", bytes_wrote);
+          log_print("%s", buf);
+        }
+        else if (bytes_wrote == 0)
+          log_print("pump: Tried to send Ok response but 0 bytes sended.\n");
+        else if (bytes_wrote == -1 * TIME_OUT)
+          log_print("pump: Tried to send Ok response but TIME_OUT occursed.\n");
+        else if (bytes_wrote == -1 * CONNECTION_CLOSED)
+          log_print("pump: Tried to send Ok response but CONNECTION_CLOSED.\n");
+        else if (bytes_wrote == -1 * POLL_ERROR)
+          log_print("pump: Tried to send Ok response but POLL_ERROR occursed.\n");
+        else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
+          log_print("pump: Tried to send Ok response but WRITE_BLOCK_ERROR occursed.\n");
       #endif
     }
-    #ifndef NDEBUG
-    else if (rc2 != file_info.st_size)
-      log_print("Warning: sendfile sended less bytes then requested (%d < %d)\n", rc2, file_info.st_size);
-    #endif
 
-    // Debug file output
-    #ifndef NDEBUG
-      log_print("File content here...\n");
-      /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
+    if (rc == EXIT_SUCCESS)
+    {
+      off_t offset = 0;
+      ssize_t bytes_sent = sendfile(conn, read_fd, &offset, file_info.st_size);
+      if (bytes_sent == -1)
       {
-        buf[rc2] = '\0';
-        log_print("%s", buf);
-      }*/
-    #endif
+        rc = EXIT_FAILURE;
+        #ifndef NDEBUG
+          log_print("pump: Error! sendfile filed (%s)\n", strerror(errno));
+        #endif
+      }
+      #ifndef NDEBUG
+      else if (bytes_sent != file_info.st_size)
+        log_print("pump: Warning! sendfile sended less bytes then requested (%d < %d)\n", bytes_sent, file_info.st_size);
+      #endif
+
+      // Debug file output
+      #ifndef NDEBUG
+        log_print("File content here...\n");
+        /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
+        {
+          buf[rc2] = '\0';
+          log_print("%s", buf);
+        }*/
+      #endif
+    }
+  }
+  else
+  {
+    size_t send_cnt;
+
+    struct block_range *pb = blocks;
+    while (pb && rc == EXIT_SUCCESS)
+    {
+      #ifndef NDEBUG
+        log_print("pump: Process range (%ld, %ld)\n", pb->start, pb->end);
+      #endif
+
+      if (pb->start < 0)
+      {
+        pb->start = file_info.st_size - -pb->start;
+        pb->end = file_info.st_size - 1;
+      }
+
+      if (pb->end == 0 || pb->end >= file_info.st_size)
+        pb->end = file_info.st_size - 1;
+
+      if (pb->start < 0 || // offset more than file_size
+          pb->end < 0 ||  // invalid end
+          pb->start > pb->end // invalid range
+         )
+      {
+        #ifndef NDEBUG
+          log_print("pump: Detected invalid range in request (start_pos = %ld, end_pos = %ld, file_size = %lu)\n", pb->start, pb->end, file_info.st_size);
+        #endif
+        send_range_not_satisfiable(conn, file_info.st_size);
+        rc = EXIT_FAILURE;
+      }
+
+      // Collapse ranges here if needed
+      // ...
+
+      pb = pb->pNext;
+    }
+
+    if (rc == EXIT_SUCCESS && !blocks->pNext)  // Range bytes requested. send file as one block with 206 responce
+    {
+      send_cnt = blocks->end - blocks->start;
+      length = snprintf(buf, STANDARD_BUFFER_SIZE, partial_head_template, mime_type, blocks->start, blocks->end, file_info.st_size, send_cnt);
+      if (length < 0 || length >= STANDARD_BUFFER_SIZE)
+        rc = EXIT_FAILURE;
+
+      // Send header
+    }
+
+    if (rc == EXIT_SUCCESS && blocks->pNext) // A few range bytes requested. send file as few blocks with 206 responce
+    {
+      length = snprintf(buf, STANDARD_BUFFER_SIZE, multipart_head, file_info.st_size);
+      if (length < 0 || length >= STANDARD_BUFFER_SIZE)
+        rc = EXIT_FAILURE;
+
+      // Send header
+
+      pb = blocks;
+      while (pb && rc == EXIT_SUCCESS)
+      {
+        send_cnt = pb->end - pb->start;
+
+        /* Send:
+        multipart_part_head_template =
+          "--vbxseparatestring\n"
+          "Content-Type: %s\n"
+          "Content-Range: bytes %lu-%lu/%lu\n"
+          "\n";
+        */
+
+        pb = pb->pNext;
+      }
+
+
+
+
+     // Send multipart_end
+    }
+
 
   }
 
@@ -320,4 +335,97 @@ int pump(int conn, const char* params)
     send_not_found(conn);
 
   return rc;
+}
+
+void send_not_found(const int conn)
+{
+  char* not_found_response =
+    "HTTP/1.0 404 Not Found\n"
+    "Content-type: text/html\n"
+    "\n"
+    "<html>\n"
+    " <body>\n"
+    "  <h1>Not Found</h1>\n"
+    "  <p>The requested URL was not found.</p>\n"
+    " </body>\n"
+    "</html>\n";
+
+  int len = strlen(not_found_response);
+  ssize_t bytes_wrote = write_block(conn, not_found_response, len);
+
+  #ifndef NDEBUG
+    if (bytes_wrote == len)
+    {
+      log_print("send_not_found: Sended to client:\n");
+      log_print("%s", not_found_response);
+    }
+    else if (bytes_wrote > 0)
+    {
+      log_print("send_not_found: Not found response partially sended to client (%d bytes sended):\n", bytes_wrote);
+      log_print("%s", not_found_response);
+    }
+    else if (bytes_wrote == 0)
+      log_print("send_not_found: Tried to send Not found response but 0 bytes sended.\n");
+    else if (bytes_wrote == -1 * TIME_OUT)
+      log_print("send_not_found: Tried to send Not found response but TIME_OUT occursed.\n");
+    else if (bytes_wrote == -1 * CONNECTION_CLOSED)
+      log_print("send_not_found: Tried to send Not found response but CONNECTION_CLOSED.\n");
+    else if (bytes_wrote == -1 * POLL_ERROR)
+      log_print("send_not_found: Tried to send Not found response but POLL_ERROR occursed.\n");
+    else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
+      log_print("send_not_found: Tried to send Not found response but WRITE_BLOCK_ERROR occursed.\n");
+  #endif
+}
+
+void send_range_not_satisfiable(const int conn, long size)
+{
+  char* range_not_satisfiable_response_template =
+    "HTTP/1.1 416 Range Not Satisfiable\n"
+    "Content-Range: bytes */%lu\n";
+
+  int len = strlen(range_not_satisfiable_response_template);
+  int bufsize = len + 64;
+  char* buf = malloc(bufsize);
+  if (!buf)
+  {
+    #ifndef NDEBUG
+      log_print("send_range_not_satisfiable: malloc failed.\n");
+    #endif
+    return;
+  }
+
+  len = snprintf(buf, bufsize, range_not_satisfiable_response_template, size);
+  if (len < 0 || len >= bufsize)
+  {
+    #ifndef NDEBUG
+      log_print("send_range_not_satisfiable: snprintf failed.\n");
+    #endif
+    return;
+  }
+
+  len = strlen(buf);
+  ssize_t bytes_wrote = write_block(conn, buf, len);
+
+  #ifndef NDEBUG
+    if (bytes_wrote == len)
+    {
+      log_print("send_range_not_satisfiable: Sended to client:\n");
+      log_print("%s", buf);
+    }
+    else if (bytes_wrote > 0)
+    {
+      log_print("send_range_not_satisfiable: partially sended to client (%d bytes sended):\n", bytes_wrote);
+      log_print("%s", buf);
+    }
+    else if (bytes_wrote == 0)
+      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but 0 bytes sended.\n");
+    else if (bytes_wrote == -1 * TIME_OUT)
+      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but TIME_OUT occursed.\n");
+    else if (bytes_wrote == -1 * CONNECTION_CLOSED)
+      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but CONNECTION_CLOSED.\n");
+    else if (bytes_wrote == -1 * POLL_ERROR)
+      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but POLL_ERROR occursed.\n");
+    else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
+      log_print("send_range_not_satisfiable: Tried to send Range Not Satisfiable response but WRITE_BLOCK_ERROR occursed.\n");
+  #endif
 }

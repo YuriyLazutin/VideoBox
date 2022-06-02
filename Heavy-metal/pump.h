@@ -14,6 +14,7 @@
 //#include <sys/types.h>
 
 #include "defines.h"
+#include "common.h"
 
 #ifndef NDEBUG
   #include "logger.h"

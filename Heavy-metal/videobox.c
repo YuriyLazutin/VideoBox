@@ -10,6 +10,7 @@
 //#include <linux/limits.h> // PATH_MAX
 #include <poll.h>
 #include "defines.h"
+#include "common.h"
 #include "player.h"
 #include "pump.h"
 #include "showboard.h"
@@ -39,13 +40,7 @@ void send_bad_method(const int conn);
 char* showboard_dir;
 ssize_t showboard_dir_length;
 
-struct block_range
-{
-  ssize_t start;
-  ssize_t end;
-  struct block_range* pNext;
-
-} *blocks;
+struct block_range* blocks;
 
 int main()
 {
