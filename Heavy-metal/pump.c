@@ -47,18 +47,18 @@ static char* partial_head_template =
 
 static char* multipart_head =
 "HTTP/1.1 206 Partial Content\n"
-"Content-Type: multipart/byteranges; boundary=vbxseparatestring\n"
+"Content-Type: multipart/byteranges; boundary=X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X\n"
 "Content-Length: %lu\n"
 "\n";
 
 static char* multipart_part_head_template =
-"\n--vbxseparatestring\n"
+"\n--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X\n"
 "Content-Type: %s\n"
 "Content-Range: bytes %lu-%lu/%lu\n"
 "\n";
 
 static char* multipart_end =
-"\n--vbxseparatestring--\n";
+"\n--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X--\n";
 
 int pump(int conn, const char* params)
 {
