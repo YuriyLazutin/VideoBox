@@ -16,26 +16,31 @@ char* server_dir;
 ssize_t server_dir_length;
 char* showboard_dir;
 ssize_t showboard_dir_length;
-char* get_self_executable_directory(ssize_t* length);
-char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght);
 
 int main()
 {
-  server_dir = get_self_executable_directory(&server_dir_length);
-  if (server_dir_length <= 0)
-  {
-    fprintf(stderr, "Error in function \"get_self_executable_directory\": server_dir_length <= 0\n");
+  server_dir = malloc(PATH_MAX);
+  if (!server_dir)
     return EXIT_FAILURE;
-  }
+  server_dir_length = readlink("/proc/self/exe", server_dir, PATH_MAX - 1);
+  if (server_dir_length == -1)
+    return EXIT_FAILURE;
+  while (server_dir_length > 0 && server_dir[server_dir_length - 1] != '/') server_dir_length--;
+  if (!server_dir_length)
+    return EXIT_FAILURE;
+  server_dir[server_dir_length] = '\0';
+  server_dir = realloc(server_dir, server_dir_length + 1);
+  if (!server_dir)
+    return EXIT_FAILURE;
 
-  showboard_dir = get_showboard_directory(&showboard_dir_length, server_dir, server_dir_length);
-  if (showboard_dir_length <= 0)
-  {
-    fprintf(stderr, "Error in function \"get_showboard_directory\": showboard_dir_length <= 0\n");
-    if (server_dir)
-      free(server_dir);
+  showboard_dir_length = server_dir_length + strlen("showboard/");
+  if (showboard_dir_length + 1 > PATH_MAX)
     return EXIT_FAILURE;
-  }
+  showboard_dir = malloc(showboard_dir_length + 1);
+  if (!showboard_dir)
+    return EXIT_FAILURE;
+  strcpy(showboard_dir, server_dir);
+  strcpy(showboard_dir + server_dir_length, "showboard/");
 
   // Scan current folder and try to find
   // 1) video.mp4, "video.webm"
@@ -527,45 +532,4 @@ int rval;
   if (showboard_dir)
     free(showboard_dir);
   return EXIT_SUCCESS;
-}
-
-char* get_self_executable_directory(ssize_t* length)
-{
-  char link_target[PATH_MAX];
-
-  // Read symlink /proc/self/exe (readlink does not insert NUL into buf)
-  *length = readlink("/proc/self/exe", link_target, sizeof(link_target) - 1);
-  if (*length == -1)
-    return NULL;
-
-  // Remove file name
-  while (*length > 0 && link_target[*length] != '/')
-    link_target[(*length)--] = '\0';
-
-  (*length)++;
-
-  return strndup(link_target, PATH_MAX);
-}
-
-/*char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
-{
-  char* result = strdup("/home/ylazutin/showboard/");
-  *length = strlen(result);
-  return result;
-}*/
-
-char* get_showboard_directory(ssize_t* length, char* bse, ssize_t bse_lenght)
-{
-  char* result = NULL;
-
-  if ((*length = bse_lenght + strlen("showboard/")) + 1 <= PATH_MAX)
-  {
-    result = malloc(*length + 1);
-    memcpy(result, bse, bse_lenght); // Without NUL
-    strcpy(result + bse_lenght, "showboard/"); // Including NUL
-  }
-  else
-    *length = -1;
-
-  return result;
 }
