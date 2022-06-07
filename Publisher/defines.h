@@ -10,6 +10,7 @@
 #define   READ_BLOCK_TIME_LIMIT           5000 // 5 sec
 #define   WRITE_BLOCK_TIME_LIMIT          5000 // 5 sec
 #define   MAX_CLOSE_DESCRIPTOR_ATTEMPTS   5
+#define   ID_CHARS                        "0123456789abcdefghijklmnopqrstuvwxy"
 
 #define   TINY_BUFFER_SIZE        8
 #define   SMALL_BUFFER_SIZE       256

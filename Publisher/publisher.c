@@ -11,50 +11,28 @@
 #include <sys/stat.h>
 //#include <linux/limits.h> // PATH_MAX
 #include <termios.h> // non-canonical mode for terminal, struct termios, tcgetattr, tcsetattr
-#include <sys/time.h>
+#include <sys/time.h> // timeval, gettimeofday
 #include "defines.h"
 
+// paths
 char* server_dir;
 ssize_t server_dir_length;
 char* showboard_dir;
 ssize_t showboard_dir_length;
-int strcmp_ncase(const char* str1, const char* str2);
-
+// charsets
+char* id_char_set;
+int   id_char_set_len;
+// terminal settings
 static struct termios stored_settings;
+
+int init();
+int destroy();
+int strcmp_ncase(const char* str1, const char* str2);
 void set_keypress();
 void reset_keypress();
-void random_init();
-char random_char();
 
 int main()
 {
-  server_dir = malloc(PATH_MAX);
-  if (!server_dir)
-    return EXIT_FAILURE;
-  server_dir_length = readlink("/proc/self/exe", server_dir, PATH_MAX - 1);
-  if (server_dir_length == -1)
-    return EXIT_FAILURE;
-  while (server_dir_length > 0 && server_dir[server_dir_length - 1] != '/') server_dir_length--;
-  if (!server_dir_length)
-    return EXIT_FAILURE;
-  server_dir[server_dir_length] = '\0';
-  server_dir = realloc(server_dir, server_dir_length + 1);
-  if (!server_dir)
-    return EXIT_FAILURE;
-
-  showboard_dir_length = server_dir_length + strlen("showboard/");
-  if (showboard_dir_length + 1 > PATH_MAX)
-    return EXIT_FAILURE;
-  showboard_dir = malloc(showboard_dir_length + 1);
-  if (!showboard_dir)
-    return EXIT_FAILURE;
-  strcpy(showboard_dir, server_dir);
-  strcpy(showboard_dir + server_dir_length, "showboard/");
-
-  // store terminal settings
-  tcgetattr(0, &stored_settings);
-
-
   // Scan current folder and try to find
   // 1) video.mp4, "video.webm"
   // 2) *.mp4, *.webm
@@ -73,13 +51,18 @@ int main()
   char* title_candidate_note = NULL;
   char* descr_candidate_note = NULL;
   char* retstr;
-  char buf[PATH_MAX], sig[SIG_SIZE], id[ID_SIZE], yes_no, rec_video, rec_trumb, rec_title, rec_descr;
+  char buf[PATH_MAX], sig[SIG_SIZE], yes_no, rec_video, rec_trumb, rec_title, rec_descr;
 
   struct stat st;
   DIR *cur_dir;
   struct dirent *entry;
   ssize_t length;
   int rc;
+
+  rc = init();
+  if (rc != NO_ERRORS)
+    return EXIT_FAILURE;
+
 
   if ((cur_dir = opendir(".")) != NULL)
   {
@@ -639,14 +622,12 @@ int main()
   }
 
   // Calculate id
-  random_init();
   buf[showboard_dir_length + SIG_SIZE] = '/';
 
   while (1)
   {
     for (int i = 0; i < ID_SIZE; i++)
-      id[i] = random_char();
-    memcpy(buf + showboard_dir_length + SIG_SIZE + 1, id, ID_SIZE);
+      buf[showboard_dir_length + SIG_SIZE + 1 + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
     buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '\0';
 
     rc = stat(buf, &st);
@@ -704,13 +685,67 @@ int main()
     return EXIT_FAILURE;
   }
 
+  rc = destroy();
+  if (rc != NO_ERRORS)
+    return EXIT_FAILURE;
+
+  printf("Your files sucessfully published.\n");
+  return EXIT_SUCCESS;
+}
+
+int init()
+{
+  // paths
+  server_dir = malloc(PATH_MAX);
+  if (!server_dir)
+    return MALLOC_FAILED;
+  server_dir_length = readlink("/proc/self/exe", server_dir, PATH_MAX - 1);
+  if (server_dir_length == -1)
+    return READ_LINK_ERROR;
+  while (server_dir_length > 0 && server_dir[server_dir_length - 1] != '/') server_dir_length--;
+  if (!server_dir_length)
+    return PATH_INVALID;
+  server_dir[server_dir_length] = '\0';
+  server_dir = realloc(server_dir, server_dir_length + 1);
+  if (!server_dir)
+    return MALLOC_FAILED;
+
+  showboard_dir_length = server_dir_length + strlen("showboard/");
+  if (showboard_dir_length + 1 > PATH_MAX)
+    return PATH_OVERFLOW;
+  showboard_dir = malloc(showboard_dir_length + 1);
+  if (!showboard_dir)
+    return MALLOC_FAILED;
+  strcpy(showboard_dir, server_dir);
+  strcpy(showboard_dir + server_dir_length, "showboard/");
+
+  // store terminal settings
+  tcgetattr(0, &stored_settings);
+
+  // charsets
+  id_char_set = strdup(ID_CHARS);
+  id_char_set_len = strlen(id_char_set);
+
+  // random generator
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  srand((unsigned int)tv.tv_usec);
+
+  return NO_ERRORS;
+}
+
+int destroy()
+{
+  // charsets
+  if (id_char_set)
+    free(id_char_set);
+
+  // paths
   if (server_dir)
     free(server_dir);
   if (showboard_dir)
     free(showboard_dir);
-
-  printf("Your files sucessfully published.\n");
-  return EXIT_SUCCESS;
+  return NO_ERRORS;
 }
 
 int strcmp_ncase(const char* str1, const char* str2)
@@ -764,23 +799,4 @@ void set_keypress()
 void reset_keypress()
 {
   tcsetattr(0, TCSANOW, &stored_settings);
-}
-
-void random_init()
-{
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  srand((unsigned int)tv.tv_usec);
-}
-
-char random_char()
-{
-  char* mas = "0123456789abcdefghijklmnopqrstuvwxy", c;
-  int cur, min = 0, max = strlen(mas);
-  if (max < RAND_MAX / 2)
-    cur = min + (int) ( (double)max * rand() / (RAND_MAX + (double)min));
-  else
-    cur = min + (rand() % (max - min + 1));
-  c = mas[cur];
-  return c;
 }
