@@ -32,6 +32,7 @@
 #define   POLL_ERROR            12
 #define   READ_BLOCK_ERROR      13
 #define   WRITE_BLOCK_ERROR     14
-#define   UNKNOWN_ERROR         15
+#define   OPEN_DIR_ERROR        15
+#define   UNKNOWN_ERROR         16
 
 #endif // DEFINES_H
