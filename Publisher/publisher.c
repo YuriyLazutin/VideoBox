@@ -39,6 +39,9 @@ int strcmp_ncase(const char* str1, const char* str2);
 void set_keypress();
 void reset_keypress();
 int find_candidates(struct candidate*, struct candidate*, struct candidate*, struct candidate*);
+void print_candidate(struct candidate* c, char* label);
+void print_candidates(struct candidate*, struct candidate*, struct candidate*, struct candidate*);
+int suggest_candidates(struct candidate*, struct candidate*, struct candidate*, struct candidate*);
 int check_video_candidate(struct candidate*);
 int check_trumb_candidate(struct candidate*);
 int check_title_candidate(struct candidate*);
@@ -69,59 +72,8 @@ int main()
   check_title_candidate(&title);
   check_descr_candidate(&descr);
 
-
   // Suggest user candidates
-  if (video.src || trumb.src || title.src || descr.src)
-  {
-    printf("Automatically detected\n");
-    if (video.src)
-    {
-      printf("Video file:         %s", video.src);
-      if (video.note)
-        printf(" (%s)", video.note);
-      printf("\n");
-    }
-
-    if (trumb.src)
-    {
-      printf("Trumbnail image:    %s", trumb.src);
-      if (trumb.note)
-        printf(" (%s)", trumb.note);
-      printf("\n");
-    }
-
-    if (title.src)
-    {
-      printf("Title file:         %s", title.src);
-      if (title.note)
-        printf(" (%s)", title.note);
-      printf("\n");
-    }
-
-    if (descr.src)
-    {
-      printf("Description file:   %s", descr.src);
-      if (descr.note)
-        printf(" (%s)", descr.note);
-      printf("\n");
-    }
-
-    printf("\n");
-
-    // Accept user choice
-    yes_no = 'X';
-    video.rec = trumb.rec = title.rec = descr.rec = 'N';
-    while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n')
-    {
-      printf("Is this information correct (Y/N)?: ");
-      set_keypress();
-      yes_no = fgetc(stdin);
-      reset_keypress();
-      printf("\n");
-    }
-    if (yes_no != 'Y' && yes_no != 'y')
-      video.rec = trumb.rec = title.rec = descr.rec = 'Y';
-  }
+  suggest_candidates(&video, &trumb, &title, &descr);
 
   if (!video.src || video.rec == 'Y')
   {
@@ -851,6 +803,53 @@ int find_candidates(struct candidate* video, struct candidate* trumb, struct can
     return OPEN_DIR_ERROR;
   }
 
+  return NO_ERRORS;
+}
+
+void print_candidate(struct candidate* c, char* label)
+{
+  if (c->src)
+  {
+    printf("%s: ", label);
+    for (int i = strlen(label) + 2; i < 20; i++)
+      printf(" ");
+    printf("%s", c->src);
+    if (c->note)
+      printf(" (%s)", c->note);
+    printf("\n");
+  }
+}
+
+void print_candidates(struct candidate* video, struct candidate* trumb, struct candidate* title, struct candidate* descr)
+{
+  print_candidate(video, "Video file");
+  print_candidate(trumb, "Trumbnail image");
+  print_candidate(title, "Title file");
+  print_candidate(descr, "Description file");
+}
+
+int suggest_candidates(struct candidate* video, struct candidate* trumb, struct candidate* title, struct candidate* descr)
+{
+  if (video->src || trumb->src || title->src || descr->src)
+  {
+    printf("Automatically detected\n");
+    print_candidates(video, trumb, title, descr);
+    printf("\n");
+
+    // Accept user choice
+    char yes_no = 'X';
+    video->rec = trumb->rec = title->rec = descr->rec = 'N';
+    while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n')
+    {
+      printf("Is this information correct (Y/N)?: ");
+      set_keypress();
+      yes_no = fgetc(stdin);
+      reset_keypress();
+      printf("\n");
+    }
+    if (yes_no != 'Y' && yes_no != 'y')
+      video->rec = trumb->rec = title->rec = descr->rec = 'Y';
+  }
   return NO_ERRORS;
 }
 
