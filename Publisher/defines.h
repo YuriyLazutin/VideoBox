@@ -33,6 +33,7 @@
 #define   READ_BLOCK_ERROR      13
 #define   WRITE_BLOCK_ERROR     14
 #define   OPEN_DIR_ERROR        15
-#define   UNKNOWN_ERROR         16
+#define   STAT_FAILED           16
+#define   UNKNOWN_ERROR         17
 
 #endif // DEFINES_H

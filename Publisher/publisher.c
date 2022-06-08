@@ -39,6 +39,10 @@ int strcmp_ncase(const char* str1, const char* str2);
 void set_keypress();
 void reset_keypress();
 int find_candidates(struct candidate*, struct candidate*, struct candidate*, struct candidate*);
+int check_video_candidate(struct candidate*);
+int check_trumb_candidate(struct candidate*);
+int check_title_candidate(struct candidate*);
+int check_descr_candidate(struct candidate*);
 
 int main()
 {
@@ -60,55 +64,11 @@ int main()
     return EXIT_FAILURE;
 
   // Analyze file size and notify user if it empty or large then possible
-  if (video.src)
-  {
-    if ( stat(video.src, &st) == -1)
-    {
-      fprintf(stderr, "video.src (%s) stat failed (%s).\n", video.src, strerror(errno));
-      video.note = strdup("stat failed!");
-    }
-    else if (st.st_size == 0)
-      video.note = strdup("Looks like file empty!");
-  }
+  check_video_candidate(&video);
+  check_trumb_candidate(&trumb);
+  check_title_candidate(&title);
+  check_descr_candidate(&descr);
 
-  if (trumb.src)
-  {
-    if ( stat(trumb.src, &st) == -1)
-    {
-      fprintf(stderr, "trumb.src (%s) stat failed (%s).\n", trumb.src, strerror(errno));
-      trumb.note = strdup("stat failed!");
-    }
-    else if (st.st_size == 0)
-      trumb.note = strdup("Looks like file empty!");
-    else if (st.st_size >= 5 * 1024 * 1024)
-      trumb.note = strdup("Looks like file is too large!");
-  }
-
-  if (title.src)
-  {
-    if ( stat(title.src, &st) == -1)
-    {
-      fprintf(stderr, "title.src (%s) stat failed (%s).\n", title.src, strerror(errno));
-      title.note = strdup("stat failed!");
-    }
-    else if (st.st_size == 0)
-      title.note = strdup("Looks like title file empty!");
-    else if (st.st_size >= SMALL_BUFFER_SIZE)
-      title.note = strdup("Looks like title is too large!");
-  }
-
-  if (descr.src)
-  {
-    if ( stat(descr.src, &st) == -1)
-    {
-      fprintf(stderr, "descr.src (%s) stat failed (%s).\n", descr.src, strerror(errno));
-      descr.note = strdup("stat failed!");
-    }
-    else if (st.st_size == 0)
-      descr.note = strdup("Looks like description file empty!");
-    else if (st.st_size >= STANDARD_BUFFER_SIZE)
-      descr.note = strdup("Looks like description is too large!");
-  }
 
   // Suggest user candidates
   if (video.src || trumb.src || title.src || descr.src)
@@ -891,5 +851,115 @@ int find_candidates(struct candidate* video, struct candidate* trumb, struct can
     return OPEN_DIR_ERROR;
   }
 
+  return NO_ERRORS;
+}
+
+int check_video_candidate(struct candidate* c)
+{
+  struct stat st;
+  if (c->src)
+  {
+    if ( stat(c->src, &st) == -1)
+    {
+      fprintf(stderr, "check_video_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
+      if (c->note)
+        free(c->note);
+      c->note = strdup("stat failed!");
+      return STAT_FAILED;
+    }
+    else if (st.st_size == 0)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like video file empty!");
+    }
+  }
+  return NO_ERRORS;
+}
+
+int check_trumb_candidate(struct candidate* c)
+{
+  struct stat st;
+  if (c->src)
+  {
+    if ( stat(c->src, &st) == -1)
+    {
+      fprintf(stderr, "check_trumb_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
+      if (c->note)
+        free(c->note);
+      c->note = strdup("stat failed!");
+      return STAT_FAILED;
+    }
+    else if (st.st_size == 0)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like trumbnail file iempty!");
+    }
+    else if (st.st_size >= 5 * 1024 * 1024)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like trumbnail file too large!");
+    }
+  }
+  return NO_ERRORS;
+}
+
+int check_title_candidate(struct candidate* c)
+{
+  struct stat st;
+  if (c->src)
+  {
+    if ( stat(c->src, &st) == -1)
+    {
+      fprintf(stderr, "check_title_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
+      if (c->note)
+        free(c->note);
+      c->note = strdup("stat failed!");
+      return STAT_FAILED;
+    }
+    else if (st.st_size == 0)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like title file empty!");
+    }
+    else if (st.st_size >= SMALL_BUFFER_SIZE)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like title too large!");
+    }
+  }
+  return NO_ERRORS;
+}
+
+int check_descr_candidate(struct candidate* c)
+{
+  struct stat st;
+  if (c->src)
+  {
+    if ( stat(c->src, &st) == -1)
+    {
+      fprintf(stderr, "check_descr_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
+      if (c->note)
+        free(c->note);
+      c->note = strdup("stat failed!");
+      return STAT_FAILED;
+    }
+    else if (st.st_size == 0)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like description file empty!");
+    }
+    else if (st.st_size >= STANDARD_BUFFER_SIZE)
+    {
+      if (c->note)
+        free(c->note);
+      c->note = strdup("Looks like description file too large!");
+    }
+  }
   return NO_ERRORS;
 }
