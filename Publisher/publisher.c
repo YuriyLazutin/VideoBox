@@ -46,21 +46,15 @@ int check_video_candidate(struct candidate*);
 int check_trumb_candidate(struct candidate*);
 int check_title_candidate(struct candidate*);
 int check_descr_candidate(struct candidate*);
+int request_file_name(struct candidate* c, char* label);
 
 int main()
 {
-  struct candidate video, trumb, title, descr;
-
-  char* retstr;
-  char buf[PATH_MAX], sig[SIG_SIZE], yes_no;
-
-  struct stat st;
-  ssize_t length;
-  int rc;
-
-  rc = init();
+  int rc = init();
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
+
+  struct candidate video, trumb, title, descr;
 
   rc = find_candidates(&video, &trumb, &title, &descr);
   if (rc != NO_ERRORS)
@@ -77,75 +71,25 @@ int main()
 
   if (!video.src || video.rec == 'Y')
   {
-    while(1)
-    {
-      if (video.src)
-        printf("Video file name (Press Enter to use detected %s): ", video.src);
-      else
-        printf("Video file name: ");
-
-      // Following cases will work
-      //   "file_name"
-      //   "./file_name"
-      //   "/full/path/to/file_name"
-      // And this will not work
-      //   "~/path/to/file_name"
-      retstr = fgets(buf, sizeof(buf), stdin);
-      if (retstr == NULL)
-        return EXIT_FAILURE;
-      length = strlen(buf);
-      while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
-        buf[--length] = '\0';
-
-      if (video.src && length == 0)
-        break;
-
-      if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
-        printf("File doesn't exists! (Ctrl+D for exit)\n");
-      else
-      {
-        video.src = realloc(video.src, length + 1);
-        strcpy(video.src, buf);
-        break;
-      }
-    }
+    rc = request_file_name(&video, "video");
+    if (rc != NO_ERRORS)
+      return EXIT_FAILURE;
   }
-
   if (!trumb.src || trumb.rec == 'Y')
   {
-    while(1)
-    {
-      if (trumb.src)
-        printf("Trumbnail file name (Press Enter to use detected %s): ", trumb.src);
-      else
-        printf("Trumbnail file name: ");
-
-      // Following cases will work
-      //   "file_name"
-      //   "./file_name"
-      //   "/full/path/to/file_name"
-      // And this will not work
-      //   "~/path/to/file_name"
-      retstr = fgets(buf, sizeof(buf), stdin);
-      if (retstr == NULL)
-        return EXIT_FAILURE;
-      length = strlen(buf);
-      while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
-        buf[--length] = '\0';
-
-      if (trumb.src && length == 0)
-        break;
-
-      if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
-        printf("File doesn't exists! (Ctrl+D for exit)\n");
-      else
-      {
-        trumb.src = realloc(trumb.src, length + 1);
-        strcpy(trumb.src, buf);
-        break;
-      }
-    }
+    rc = request_file_name(&trumb, "trumbnail");
+    if (rc != NO_ERRORS)
+      return EXIT_FAILURE;
   }
+
+
+  char* retstr;
+  char buf[PATH_MAX], sig[SIG_SIZE], yes_no;
+
+  struct stat st;
+  ssize_t length;
+
+
 
   if (title.src && title.rec == 'Y')
   {
@@ -960,5 +904,52 @@ int check_descr_candidate(struct candidate* c)
       c->note = strdup("Looks like description file too large!");
     }
   }
+  return NO_ERRORS;
+}
+
+int request_file_name(struct candidate* c, char* label)
+{
+  char buf[PATH_MAX];
+  char* retstr;
+  ssize_t length;
+  struct stat st;
+
+  while(1)
+  {
+    if (c->src)
+      printf("Prompt %s file name (Press Enter to use \"%s\" as is): ", label, c->src);
+    else
+      printf("Prompt %s file name: ", label);
+
+    // Following cases will work
+    //   "file_name"
+    //   "./file_name"
+    //   "/full/path/to/file_name"
+    // And this will not work
+    //   "~/path/to/file_name"
+    retstr = fgets(buf, sizeof(buf), stdin);
+    if (retstr == NULL) // error or EOF
+    {
+      fprintf(stderr, "request_file_name: fgets returned NULL (%s).\n", strerror(errno));
+      return UNKNOWN_ERROR;
+    }
+
+    length = strlen(buf);
+    while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
+      buf[--length] = '\0';
+
+    if (c->src && length == 0) // Enter pressed or something like this
+      break;
+
+    if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
+      printf("File doesn't exists! (Ctrl+D for exit)\n");
+    else
+    {
+      c->src = realloc(c->src, length + 1);
+      strcpy(c->src, buf);
+      break;
+    }
+  }
+
   return NO_ERRORS;
 }
