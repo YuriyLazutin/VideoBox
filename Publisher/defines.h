@@ -42,6 +42,7 @@
 #define   WAITPID_FAILED        21
 #define   DUPLICATE_FOUND       22
 #define   NOT_FILE              23
+#define   RENAME_FILE_FAILED    24
 #define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H

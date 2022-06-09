@@ -56,6 +56,7 @@ int check_duplicates(const struct candidate* c, char* path);
 int test_file(const char* path);
 int filescmp(const char* path1, const char* path2);
 int make_id_directory(char* path);
+int publish_candidate(const struct candidate* c, char* path);
 
 int main()
 {
@@ -150,38 +151,23 @@ int main()
 
   // Move files into showboard
   buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '/';
+  buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1] = '\0';
 
-  strcpy(buf + showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1, video.src);
-  rc = rename(video.src, buf);
-  if (rc == -1)
-  {
-    fprintf(stderr, "Failed to move %s -> %s (%s)!\n", video.src, buf, strerror(errno));
+  rc = publish_candidate(&video, buf);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
 
-  strcpy(buf + showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1, trumb.src);
-  rc = rename(trumb.src, buf);
-  if (rc == -1)
-  {
-    fprintf(stderr, "Failed to move %s -> %s (%s)!\n", trumb.src, buf, strerror(errno));
+  rc = publish_candidate(&trumb, buf);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
 
-  strcpy(buf + showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1, title.src);
-  rc = rename(title.src, buf);
-  if (rc == -1)
-  {
-    fprintf(stderr, "Failed to move %s -> %s (%s)!\n", title.src, buf, strerror(errno));
+  rc = publish_candidate(&title, buf);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
 
-  strcpy(buf + showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1, descr.src);
-  rc = rename(descr.src, buf);
-  if (rc == -1)
-  {
-    fprintf(stderr, "Failed to move %s -> %s (%s)!\n", descr.src, buf, strerror(errno));
+  rc = publish_candidate(&descr, buf);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
 
   // Local destroy
   if (descr.note)
@@ -1129,4 +1115,23 @@ int make_id_directory(char* path)
       return rc;
   }
   return NO_ERRORS;
+}
+
+int publish_candidate(const struct candidate* c, char* path)
+{
+  ssize_t length;
+  length = strlen(path);
+  strcpy(path + length, c->target);
+  int rc = rename(c->src, path);
+  if (rc == -1)
+  {
+    fprintf(stderr, "publish_candidate: failed to move %s -> %s (%s)!\n", c->src, path, strerror(errno));
+    rc = RENAME_FILE_FAILED;
+  }
+  else
+    rc = NO_ERRORS;
+
+  path[length] = '\0';
+
+  return rc;
 }
