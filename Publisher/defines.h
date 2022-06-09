@@ -40,6 +40,8 @@
 #define   DUP2_FAILED           19
 #define   EXEC_FAILED           20
 #define   WAITPID_FAILED        21
+#define   DUPLICATE_FOUND       22
+#define   NOT_FILE              23
 #define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H

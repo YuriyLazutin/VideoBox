@@ -52,6 +52,9 @@ char ask_yes_no(const char*);
 int make_signature(const struct candidate* c, char* sig);
 int check_directory(const char*);
 int make_directory(const char*);
+int check_duplicates(const struct candidate* c, char* path);
+int test_file(const char* path);
+int filescmp(const char* path1, const char* path2);
 int make_id_directory(char* path);
 
 int main()
@@ -135,6 +138,11 @@ int main()
   // Calculate id
   buf[showboard_dir_length + SIG_SIZE] = '/';
   buf[showboard_dir_length + SIG_SIZE + 1] = '\0';
+
+  rc = check_duplicates(&video, buf);
+  if (rc != NO_ERRORS)
+    return EXIT_FAILURE;
+
 
   rc = make_id_directory(buf);
   if (rc != NO_ERRORS)
@@ -951,6 +959,130 @@ int make_directory(const char* path)
     return OPEN_DIR_ERROR;
   }
   return NO_ERRORS;
+}
+
+int check_duplicates(const struct candidate* c, char* path)
+{
+  int rc = NO_ERRORS;
+  DIR *cur_dir;
+  struct dirent *entry;
+  ssize_t length;
+  char yes_no;
+
+  if ((cur_dir = opendir(path)) != NULL)
+  {
+    while ((entry = readdir(cur_dir)) != NULL)
+    {
+      length = strlen(entry->d_name);
+      if (length == ID_SIZE && strspn(entry->d_name, ID_CHARS) == ID_SIZE)
+      {
+        length = strlen(path);
+        strcpy(path + length, "video.mp4");
+        if (test_file(path) == NO_ERRORS)
+        {
+          if (filescmp(c->src, path) == 0)
+          {
+            printf("Same video file already published on %s\n", path);
+            yes_no = ask_yes_no("Do you want to publish it anyway (Y/N)?");
+            if (yes_no == 'N' || yes_no == 'n')
+              rc = DUPLICATE_FOUND;
+            break;
+          }
+        }
+
+        strcpy(path + length, "video.webm");
+        if (test_file(path) == NO_ERRORS)
+        {
+          if (filescmp(c->src, path) == 0)
+          {
+            printf("Same video file already published on %s\n", path);
+            yes_no = ask_yes_no("Do you want to publish it anyway (Y/N)?");
+            if (yes_no == 'N' || yes_no == 'n')
+              rc = DUPLICATE_FOUND;
+            break;
+          }
+        }
+
+      }
+    }
+    path[length] = '\0';
+    closedir(cur_dir);
+  }
+  else
+  {
+    fprintf(stderr, "check_duplicates: Can't open %s directory.\n", path);
+    rc = OPEN_DIR_ERROR;
+  }
+
+  return rc;
+}
+
+int test_file(const char* path)
+{
+  struct stat st;
+  int rc = stat(path, &st);
+  if (rc == 0 && S_ISREG(st.st_mode))
+    return NO_ERRORS;
+  else if (rc == -1 && errno == ENOENT)
+    return NOT_FOUND;
+  else if (rc == -1)
+  {
+    fprintf(stderr, "test_file: stat failed on \"%s\" directory (%s)!\n", path, strerror(errno));
+    return STAT_FAILED;
+  }
+  else
+    return NOT_FILE;
+  return NO_ERRORS;
+}
+
+int filescmp(const char* path1, const char* path2)
+{
+  struct stat st1, st2;
+  int rc1, rc2;
+
+  rc1 = stat(path1, &st1);
+  rc2 = stat(path2, &st2);
+
+  if (rc1 == 0 && S_ISREG(st1.st_mode) && rc2 == 0 && S_ISREG(st2.st_mode))
+  {
+    int fd1, fd2;
+    char buf1[STANDARD_BUFFER_SIZE], buf2[STANDARD_BUFFER_SIZE];
+    ssize_t read_byte1, read_byte2;
+
+    fd1 =  open(path1, O_RDONLY);
+    if (fd1 == -1)
+      return UNKNOWN_ERROR;
+    fd2 =  open(path2, O_RDONLY);
+    if (fd2 == -1)
+      return UNKNOWN_ERROR;
+
+    do
+    {
+      read_byte1 = read(fd1, buf1, STANDARD_BUFFER_SIZE);
+      read_byte2 = read(fd2, buf2, STANDARD_BUFFER_SIZE);
+      if (read_byte1 < 0 || read_byte2 < 0)
+        break;
+      if (read_byte1 > read_byte2)
+        return 1;
+      else if (read_byte1 < read_byte2)
+        return -1;
+      else if (read_byte1 == read_byte2)
+      {
+        rc1 = memcmp(buf1, buf2, read_byte1);
+        if (rc1 != 0)
+          return rc1;
+      }
+    }
+    while (read_byte1 != 0 || read_byte2 != 0);
+
+    if (rc1 == 0)
+      return 0;
+
+    close(fd1);
+    close(fd2);
+  }
+
+  return UNKNOWN_ERROR;
 }
 
 int make_id_directory(char* path)
