@@ -49,6 +49,7 @@ int check_descr_candidate(struct candidate*);
 int request_file_name(struct candidate* c, const char* label);
 int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit);
 char ask_yes_no(const char*);
+int make_signature(const struct candidate* c, char* sig);
 
 int main()
 {
@@ -104,76 +105,16 @@ int main()
       return EXIT_FAILURE;
   }
 
-  char buf[PATH_MAX], sig[SIG_SIZE];
-  struct stat st;
-
-  // Calculate sig
-  int fds[2];
-  rc = pipe(fds);
-  if (rc == -1)
-  {
-    fprintf(stderr, "Pipe creation failed (%s)!\n", strerror(errno));
+  char sig[SIG_SIZE];
+  rc = make_signature(&video, sig);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
-
-  pid_t pid = fork();
-
-  if (pid == (pid_t)-1)
-  {
-    fprintf(stderr, "Fork failed (%s)!\n", strerror(errno));
-    return EXIT_FAILURE;
-  }
-  else if (pid == (pid_t)0) // child
-  {
-
-    close(fds[0]);
-
-    rc = dup2(fds[1], STDOUT_FILENO);
-    if (rc == -1)
-    {
-      fprintf(stderr, "dup2 failed (%s)!\n", strerror(errno));
-      return EXIT_FAILURE;
-    }
-
-    close(fds[1]);
-
-    rc = execlp("md5sum", "md5sum", video.src, NULL);
-    if (rc == -1)
-    {
-      fprintf(stderr, "execlp failed (%s)!\n", strerror(errno));
-      return EXIT_FAILURE;
-    }
-  }
-  else // parent
-  {
-    close(fds[1]);
-
-    ssize_t bytes_read = read(fds[0], buf, STANDARD_BUFFER_SIZE);
-    if (bytes_read == 0)
-    {
-      fprintf(stderr, "md5sum: readed 0 bytes!\n");
-      return EXIT_FAILURE;
-    }
-    else if (bytes_read == -1)
-    {
-      fprintf(stderr, "md5sum: read failed (%s)!\n", strerror(errno));
-      return EXIT_FAILURE;
-    }
-    else if (bytes_read > SIG_SIZE)
-      memcpy(sig, buf, SIG_SIZE);
-
-    rc = waitpid(pid, NULL, 0);
-    if (rc == -1)
-    {
-      fprintf(stderr, "waitpid failed (%s)!\n", strerror(errno));
-      return EXIT_FAILURE;
-    }
-
-    close(fds[0]);
-  }
 
   //strcpy(buf, "28badc69dc9e82a51ee885122552ad1c");
   //memcpy(sig, buf, SIG_SIZE);
+
+  char buf[PATH_MAX];
+  struct stat st;
 
   mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
   rc = stat(showboard_dir, &st);
@@ -953,4 +894,78 @@ char ask_yes_no(const char* question)
   }
   while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n');
   return yes_no;
+}
+
+int make_signature(const struct candidate* c, char* sig)
+{
+  int fds[2];
+  int rc = pipe(fds);
+  if (rc == -1)
+  {
+    fprintf(stderr, "make_signature: pipe creation failed (%s)!\n", strerror(errno));
+    return PIPE_FAILED;
+  }
+
+  pid_t pid = fork();
+
+  if (pid == (pid_t)-1)
+  {
+    fprintf(stderr, "make_signature: fork failed (%s)!\n", strerror(errno));
+    return FORK_FAILED;
+  }
+
+  if (pid == (pid_t)0) // child
+  {
+    close(fds[0]);
+
+    rc = dup2(fds[1], STDOUT_FILENO);
+    if (rc == -1)
+    {
+      fprintf(stderr, "make_signature: dup2 failed (%s)!\n", strerror(errno));
+      return DUP2_FAILED;
+    }
+
+    close(fds[1]);
+
+    rc = execlp("md5sum", "md5sum", c->src, NULL);
+    if (rc == -1)
+    {
+      fprintf(stderr, "make_signature: execlp failed (%s)!\n", strerror(errno));
+      return EXEC_FAILED;
+    }
+  }
+  else // parent
+  {
+    close(fds[1]);
+    char buf[STANDARD_BUFFER_SIZE];
+    ssize_t bytes_read = read(fds[0], buf, STANDARD_BUFFER_SIZE);
+    if (bytes_read == 0)
+    {
+      fprintf(stderr, "make_signature: md5sum failed (readed 0 bytes)!\n");
+      return READ_BLOCK_ERROR;
+    }
+    else if (bytes_read == -1)
+    {
+      fprintf(stderr, "make_signature: md5sum (read failed) (%s)!\n", strerror(errno));
+      return READ_BLOCK_ERROR;
+    }
+    else if (bytes_read > SIG_SIZE)
+      memcpy(sig, buf, SIG_SIZE);
+    else
+    {
+      fprintf(stderr, "make_signature: md5sum (read less bytes than needed)!\n");
+      return READ_BLOCK_ERROR;
+    }
+
+    rc = waitpid(pid, NULL, 0);
+    if (rc == -1)
+    {
+      fprintf(stderr, "make_signature: waitpid failed (%s)!\n", strerror(errno));
+      return WAITPID_FAILED;
+    }
+
+    close(fds[0]);
+  }
+
+  return NO_ERRORS;
 }

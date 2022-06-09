@@ -34,6 +34,11 @@
 #define   WRITE_BLOCK_ERROR     14
 #define   OPEN_DIR_ERROR        15
 #define   STAT_FAILED           16
-#define   UNKNOWN_ERROR         17
+#define   PIPE_FAILED           17
+#define   FORK_FAILED           18
+#define   DUP2_FAILED           19
+#define   EXEC_FAILED           20
+#define   WAITPID_FAILED        21
+#define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H
