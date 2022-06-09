@@ -51,6 +51,7 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
 char ask_yes_no(const char*);
 int make_signature(const struct candidate* c, char* sig);
 int check_directory(const char*);
+int make_directory(const char*);
 
 int main()
 {
@@ -115,6 +116,8 @@ int main()
   //memcpy(sig, buf, SIG_SIZE);
 
   rc = check_directory(showboard_dir);
+  if (rc == NOT_FOUND)
+    rc = make_directory(showboard_dir);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
@@ -123,10 +126,10 @@ int main()
   memcpy(buf + showboard_dir_length, sig, SIG_SIZE);
   buf[showboard_dir_length + SIG_SIZE] = '\0';
   rc = check_directory(buf);
+  if (rc == NOT_FOUND)
+    rc = make_directory(buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-
-
 
   // Calculate id
   buf[showboard_dir_length + SIG_SIZE] = '/';
@@ -137,26 +140,18 @@ int main()
       buf[showboard_dir_length + SIG_SIZE + 1 + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
     buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '\0';
 
-    struct stat st;
-    rc = stat(buf, &st);
-    if (rc == 0 && S_ISDIR(st.st_mode))
+    rc = check_directory(buf);
+    if (rc == NO_ERRORS)
       continue;
-    else if (rc == -1 && errno == ENOENT)
+    else if (rc == NOT_FOUND)
     {
-      mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
-      rc = mkdir(buf, dir_mode);
-      if (rc == -1)
-      {
-        fprintf(stderr, "Failed to create %s directory (%s)!\n", buf, strerror(errno));
-        return EXIT_FAILURE;
-      }
-      break;
+      rc = make_directory(buf);
+      if (rc == NO_ERRORS)
+        break;
     }
-    else if (rc == -1)
-    {
-      fprintf(stderr, "stat failed on %s directory (%s)!\n", buf, strerror(errno));
+
+    if (rc != NO_ERRORS)
       return EXIT_FAILURE;
-    }
   }
 
   // Move files into showboard
@@ -951,19 +946,23 @@ int check_directory(const char* path)
   if (rc == 0 && S_ISDIR(st.st_mode))
     return NO_ERRORS;
   else if (rc == -1 && errno == ENOENT)
-  {
-    mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
-    rc = mkdir(path, dir_mode);
-    if (rc == -1)
-    {
-      fprintf(stderr, "check_directory: failed to create \"%s\" directory (%s)!\n", path, strerror(errno));
-      return OPEN_DIR_ERROR;
-    }
-  }
+    return NOT_FOUND;
   else if (rc == -1)
   {
     fprintf(stderr, "check_directory: stat failed on \"%s\" directory (%s)!\n", path, strerror(errno));
     return STAT_FAILED;
+  }
+  return NO_ERRORS;
+}
+
+int make_directory(const char* path)
+{
+  mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
+  int rc = mkdir(path, dir_mode);
+  if (rc == -1)
+  {
+    fprintf(stderr, "make_directory: failed to create \"%s\" directory (%s)!\n", path, strerror(errno));
+    return OPEN_DIR_ERROR;
   }
   return NO_ERRORS;
 }
