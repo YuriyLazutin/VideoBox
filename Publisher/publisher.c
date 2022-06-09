@@ -50,6 +50,7 @@ int request_file_name(struct candidate* c, const char* label);
 int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit);
 char ask_yes_no(const char*);
 int make_signature(const struct candidate* c, char* sig);
+int check_directory(const char*);
 
 int main()
 {
@@ -113,48 +114,19 @@ int main()
   //strcpy(buf, "28badc69dc9e82a51ee885122552ad1c");
   //memcpy(sig, buf, SIG_SIZE);
 
-  char buf[PATH_MAX];
-  struct stat st;
-
-  mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
-  rc = stat(showboard_dir, &st);
-  if (rc == 0 && S_ISDIR(st.st_mode))
-    NULL;
-  else if (rc == -1 && errno == ENOENT)
-  {
-    rc = mkdir(showboard_dir, dir_mode);
-    if (rc == -1)
-    {
-      fprintf(stderr, "Failed to create %s directory (%s)!\n", showboard_dir, strerror(errno));
-      return EXIT_FAILURE;
-    }
-  }
-  else if (rc == -1)
-  {
-    fprintf(stderr, "stat failed on %s directory (%s)!\n", showboard_dir, strerror(errno));
+  rc = check_directory(showboard_dir);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
 
+  char buf[PATH_MAX];
   strcpy(buf, showboard_dir);
   memcpy(buf + showboard_dir_length, sig, SIG_SIZE);
   buf[showboard_dir_length + SIG_SIZE] = '\0';
-  rc = stat(buf, &st);
-  if (rc == 0 && S_ISDIR(st.st_mode))
-    NULL;
-  else if (rc == -1 && errno == ENOENT)
-  {
-    rc = mkdir(buf, dir_mode);
-    if (rc == -1)
-    {
-      fprintf(stderr, "Failed to create %s directory (%s)!\n", buf, strerror(errno));
-      return EXIT_FAILURE;
-    }
-  }
-  else if (rc == -1)
-  {
-    fprintf(stderr, "stat failed on %s directory (%s)!\n", buf, strerror(errno));
+  rc = check_directory(buf);
+  if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-  }
+
+
 
   // Calculate id
   buf[showboard_dir_length + SIG_SIZE] = '/';
@@ -165,11 +137,13 @@ int main()
       buf[showboard_dir_length + SIG_SIZE + 1 + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
     buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '\0';
 
+    struct stat st;
     rc = stat(buf, &st);
     if (rc == 0 && S_ISDIR(st.st_mode))
       continue;
     else if (rc == -1 && errno == ENOENT)
     {
+      mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
       rc = mkdir(buf, dir_mode);
       if (rc == -1)
       {
@@ -967,5 +941,29 @@ int make_signature(const struct candidate* c, char* sig)
     close(fds[0]);
   }
 
+  return NO_ERRORS;
+}
+
+int check_directory(const char* path)
+{
+  struct stat st;
+  int rc = stat(path, &st);
+  if (rc == 0 && S_ISDIR(st.st_mode))
+    return NO_ERRORS;
+  else if (rc == -1 && errno == ENOENT)
+  {
+    mode_t dir_mode = S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP;
+    rc = mkdir(path, dir_mode);
+    if (rc == -1)
+    {
+      fprintf(stderr, "check_directory: failed to create \"%s\" directory (%s)!\n", path, strerror(errno));
+      return OPEN_DIR_ERROR;
+    }
+  }
+  else if (rc == -1)
+  {
+    fprintf(stderr, "check_directory: stat failed on \"%s\" directory (%s)!\n", path, strerror(errno));
+    return STAT_FAILED;
+  }
   return NO_ERRORS;
 }
