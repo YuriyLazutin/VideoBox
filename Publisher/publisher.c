@@ -52,6 +52,7 @@ char ask_yes_no(const char*);
 int make_signature(const struct candidate* c, char* sig);
 int check_directory(const char*);
 int make_directory(const char*);
+int make_id_directory(char* path);
 
 int main()
 {
@@ -133,26 +134,11 @@ int main()
 
   // Calculate id
   buf[showboard_dir_length + SIG_SIZE] = '/';
+  buf[showboard_dir_length + SIG_SIZE + 1] = '\0';
 
-  while (1)
-  {
-    for (int i = 0; i < ID_SIZE; i++)
-      buf[showboard_dir_length + SIG_SIZE + 1 + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
-    buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '\0';
-
-    rc = check_directory(buf);
-    if (rc == NO_ERRORS)
-      continue;
-    else if (rc == NOT_FOUND)
-    {
-      rc = make_directory(buf);
-      if (rc == NO_ERRORS)
-        break;
-    }
-
-    if (rc != NO_ERRORS)
-      return EXIT_FAILURE;
-  }
+  rc = make_id_directory(buf);
+  if (rc != NO_ERRORS)
+    return EXIT_FAILURE;
 
   // Move files into showboard
   buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '/';
@@ -963,6 +949,52 @@ int make_directory(const char* path)
   {
     fprintf(stderr, "make_directory: failed to create \"%s\" directory (%s)!\n", path, strerror(errno));
     return OPEN_DIR_ERROR;
+  }
+  return NO_ERRORS;
+}
+
+int make_id_directory(char* path)
+{
+  ssize_t length;
+  length = strlen(path);
+  int rc, attempts = 0;
+
+  while (attempts < MAX_CREATE_ID_DIR_ATTEMPTS)
+  {
+    for (int i = 0; i < ID_SIZE; i++)
+      path[length + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
+    path[length + ID_SIZE] = '\0';
+
+    rc = check_directory(path);
+    if (rc == NOT_FOUND)
+    {
+      rc = make_directory(path);
+      if (rc == NO_ERRORS)
+        break;
+    }
+    else if (rc == NO_ERRORS) // Dir already exists
+    {
+      struct stat st;
+
+      strcpy(path + length + ID_SIZE, "video.mp4");
+      rc = stat(path, &st);
+      if (rc == 0 && S_ISREG(st.st_mode))
+      {
+        attempts++;
+        continue;
+      }
+
+      strcpy(path + length + ID_SIZE, "video.webm");
+      rc = stat(path, &st);
+      if (rc == 0 && S_ISREG(st.st_mode))
+      {
+        attempts++;
+        continue;
+      }
+      break;
+    }
+    else
+      return rc;
   }
   return NO_ERRORS;
 }
