@@ -48,6 +48,7 @@ int check_title_candidate(struct candidate*);
 int check_descr_candidate(struct candidate*);
 int request_file_name(struct candidate* c, const char* label);
 int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit);
+char ask_yes_no(const char*);
 
 int main()
 {
@@ -83,29 +84,10 @@ int main()
       return EXIT_FAILURE;
   }
 
-
-  char* retstr;
-  char buf[PATH_MAX], sig[SIG_SIZE], yes_no;
-
-  struct stat st;
-  ssize_t length;
-
-
-
   if (title.src && title.rec == 'Y')
-  {
-    yes_no = 'X';
-    while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n')
-    {
-      printf("Would you like to change title file (Y/N)?: ");
-      set_keypress();
-      yes_no = fgetc(stdin);
-      reset_keypress();
-      printf("\n");
-    }
-  }
+    title.rec = ask_yes_no("Would you like to change title file (Y/N)?");
 
-  if ( !title.src || (title.src && title.rec == 'Y' && (yes_no == 'Y' || yes_no == 'y')) )
+  if ( !title.src || (title.src && title.rec == 'Y') )
   {
     rc = request_file_name_or_it_contents(&title, "title", "title.txt", SMALL_BUFFER_SIZE);
     if (rc != NO_ERRORS)
@@ -113,24 +95,17 @@ int main()
   }
 
   if (descr.src && descr.rec == 'Y')
-  {
-    yes_no = 'X';
-    while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n')
-    {
-      printf("Would you like to change description file (Y/N)?: ");
-      set_keypress();
-      yes_no = fgetc(stdin);
-      reset_keypress();
-      printf("\n");
-    }
-  }
+    descr.rec = ask_yes_no("Would you like to change description file (Y/N)?");
 
-  if ( !descr.src || (descr.src && descr.rec == 'Y' && (yes_no == 'Y' || yes_no == 'y')) )
+  if ( !descr.src || (descr.src && descr.rec == 'Y') )
   {
     rc = request_file_name_or_it_contents(&descr, "description", "descr.html", STANDARD_BUFFER_SIZE);
     if (rc != NO_ERRORS)
       return EXIT_FAILURE;
   }
+
+  char buf[PATH_MAX], sig[SIG_SIZE];
+  struct stat st;
 
   // Calculate sig
   int fds[2];
@@ -963,4 +938,19 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
 
   free(buf);
   return rc;
+}
+
+char ask_yes_no(const char* question)
+{
+  char yes_no;
+  do
+  {
+    printf("%s: ", question);
+    set_keypress();
+    yes_no = fgetc(stdin);
+    reset_keypress();
+    printf("\n");
+  }
+  while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n');
+  return yes_no;
 }
