@@ -46,7 +46,8 @@ int check_video_candidate(struct candidate*);
 int check_trumb_candidate(struct candidate*);
 int check_title_candidate(struct candidate*);
 int check_descr_candidate(struct candidate*);
-int request_file_name(struct candidate* c, char* label);
+int request_file_name(struct candidate* c, const char* label);
+int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit);
 
 int main()
 {
@@ -106,55 +107,9 @@ int main()
 
   if ( !title.src || (title.src && title.rec == 'Y' && (yes_no == 'Y' || yes_no == 'y')) )
   {
-    while (1)
-    {
-      printf("Prompt new title file name (Press Enter to prompt only title itself): ");
-
-      // Following cases will work
-      //   "file_name"
-      //   "./file_name"
-      //   "/full/path/to/file_name"
-      // And this will not work
-      //   "~/path/to/file_name"
-      retstr = fgets(buf, sizeof(buf), stdin);
-      if (retstr == NULL)
-        return EXIT_FAILURE;
-      length = strlen(buf);
-      while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
-        buf[--length] = '\0';
-
-      if (length == 0)
-      {
-        length = strlen("title.txt");
-        title.src = realloc(title.src, length + 1);
-        strcpy(title.src, "title.txt");
-
-        // create file
-        mode_t mode = S_IRUSR | S_IWUSR| S_IRGRP | S_IWGRP | S_IROTH;
-        int fd = open(title.src, O_WRONLY | O_EXCL | O_CREAT, mode);
-        if (fd == -1)
-          perror("title.txt creation failed!");
-        else
-        {
-          printf("Prompt title contents (max %d chars): ", SMALL_BUFFER_SIZE - 1);
-          retstr = fgets(buf, SMALL_BUFFER_SIZE - 1, stdin);
-          if (retstr == NULL)
-            return EXIT_FAILURE;
-          length = strlen(buf);
-          write(fd, buf, length);
-          close(fd);
-        }
-        break;
-      }
-      else if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
-        printf("File doesn't exists! (Ctrl+D for exit)\n");
-      else
-      {
-        title.src = realloc(title.src, length + 1);
-        strcpy(title.src, buf);
-        break;
-      }
-    }
+    rc = request_file_name_or_it_contents(&title, "title", "title.txt", SMALL_BUFFER_SIZE);
+    if (rc != NO_ERRORS)
+      return EXIT_FAILURE;
   }
 
   if (descr.src && descr.rec == 'Y')
@@ -172,55 +127,9 @@ int main()
 
   if ( !descr.src || (descr.src && descr.rec == 'Y' && (yes_no == 'Y' || yes_no == 'y')) )
   {
-    while (1)
-    {
-      printf("Prompt new description file name (Press Enter to prompt only description itself): ");
-
-      // Following cases will work
-      //   "file_name"
-      //   "./file_name"
-      //   "/full/path/to/file_name"
-      // And this will not work
-      //   "~/path/to/file_name"
-      retstr = fgets(buf, sizeof(buf), stdin);
-      if (retstr == NULL)
-        return EXIT_FAILURE;
-      length = strlen(buf);
-      while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
-        buf[--length] = '\0';
-
-      if (length == 0)
-      {
-        length = strlen("descr.html");
-        descr.src = realloc(descr.src, length + 1);
-        strcpy(descr.src, "descr.html");
-
-        // create file
-        mode_t mode = S_IRUSR | S_IWUSR| S_IRGRP | S_IWGRP | S_IROTH;
-        int fd = open(descr.src, O_WRONLY | O_EXCL | O_CREAT, mode);
-        if (fd == -1)
-          perror("descr.html creation failed!");
-        else
-        {
-          printf("Prompt description contents (max %d chars): ", STANDARD_BUFFER_SIZE - 1);
-          retstr = fgets(buf, STANDARD_BUFFER_SIZE - 1, stdin);
-          if (retstr == NULL)
-            return EXIT_FAILURE;
-          length = strlen(buf);
-          write(fd, buf, length);
-          close(fd);
-        }
-        break;
-      }
-      else if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
-        printf("File doesn't exists! (Ctrl+D for exit)\n");
-      else
-      {
-        descr.src = realloc(descr.src, length + 1);
-        strcpy(descr.src, buf);
-        break;
-      }
-    }
+    rc = request_file_name_or_it_contents(&descr, "description", "descr.html", STANDARD_BUFFER_SIZE);
+    if (rc != NO_ERRORS)
+      return EXIT_FAILURE;
   }
 
   // Calculate sig
@@ -907,7 +816,7 @@ int check_descr_candidate(struct candidate* c)
   return NO_ERRORS;
 }
 
-int request_file_name(struct candidate* c, char* label)
+int request_file_name(struct candidate* c, const char* label)
 {
   char buf[PATH_MAX];
   char* retstr;
@@ -946,10 +855,112 @@ int request_file_name(struct candidate* c, char* label)
     else
     {
       c->src = realloc(c->src, length + 1);
+      if (!c->src)
+      {
+        fprintf(stderr, "request_file_name: realloc failed (%s).\n", strerror(errno));
+        return MALLOC_FAILED;
+      }
       strcpy(c->src, buf);
       break;
     }
   }
 
   return NO_ERRORS;
+}
+
+int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit)
+{
+  char *buf, *retstr;
+  ssize_t length;
+  struct stat st;
+
+  if (limit > PATH_MAX)
+    buf = malloc(limit);
+  else
+    buf = malloc(PATH_MAX);
+
+  if (!buf)
+  {
+    fprintf(stderr, "request_file_name_or_it_contents: malloc failed (%s).\n", strerror(errno));
+    return MALLOC_FAILED;
+  }
+
+  int rc = NO_ERRORS;
+  while(1)
+  {
+    printf("Prompt %s file name (Press Enter to prompt only %s itself): ", label, label);
+
+    // Following cases will work
+    //   "file_name"
+    //   "./file_name"
+    //   "/full/path/to/file_name"
+    // And this will not work
+    //   "~/path/to/file_name"
+    retstr = fgets(buf, PATH_MAX, stdin);
+    if (retstr == NULL) // error or EOF
+    {
+      fprintf(stderr, "request_file_name_or_it_contents: fgets returned NULL (%s).\n", strerror(errno));
+      rc = UNKNOWN_ERROR;
+      break;
+    }
+
+    length = strlen(buf);
+    while (length > 0 && (buf[length-1] == '\n' || buf[length-1] == ' ' || buf[length-1] == '/'))
+      buf[--length] = '\0';
+
+    if (length == 0) // Enter pressed or something like this
+    {
+      length = strlen(default_file_name);
+      c->src = realloc(c->src, length + 1);
+      if (!c->src)
+      {
+        fprintf(stderr, "request_file_name_or_it_contents: realloc failed (%s).\n", strerror(errno));
+        rc = MALLOC_FAILED;
+        break;
+      }
+      strcpy(c->src, default_file_name);
+
+      // create file
+      mode_t mode = S_IRUSR | S_IWUSR| S_IRGRP | S_IWGRP | S_IROTH;
+      int fd = open(c->src, O_WRONLY | O_EXCL | O_CREAT, mode);
+      if (fd == -1)
+      {
+        fprintf(stderr, "request_file_name_or_it_contents: create \"%s\" file error (%s).\n", default_file_name, strerror(errno));
+        rc = OPEN_FILE_ERROR;
+        break;
+      }
+      else
+      {
+        printf("Prompt %s contents (max %ld chars): ", label, limit - 1);
+        retstr = fgets(buf, limit - 1, stdin);
+        if (retstr == NULL) // error or EOF
+        {
+          fprintf(stderr, "request_file_name_or_it_contents: fgets returned NULL (%s).\n", strerror(errno));
+          rc = UNKNOWN_ERROR;
+          break;
+        }
+        length = strlen(buf);
+        write(fd, buf, length);
+        close(fd);
+      }
+      break;
+    }
+    else if (stat(buf, &st) != 0 || !S_ISREG(st.st_mode))
+      printf("File doesn't exists! (Ctrl+D for exit)\n");
+    else
+    {
+      c->src = realloc(c->src, length + 1);
+      if (!c->src)
+      {
+        fprintf(stderr, "request_file_name_or_it_contents: realloc failed (%s).\n", strerror(errno));
+        rc = MALLOC_FAILED;
+        break;
+      }
+      strcpy(c->src, buf);
+      break;
+    }
+  }
+
+  free(buf);
+  return rc;
 }
