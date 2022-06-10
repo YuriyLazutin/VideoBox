@@ -14,17 +14,6 @@
 #include <sys/time.h> // timeval, gettimeofday
 #include "defines.h"
 
-// paths
-char* server_dir;
-ssize_t server_dir_length;
-char* showboard_dir;
-ssize_t showboard_dir_length;
-// charsets
-char* id_char_set;
-int   id_char_set_len;
-// terminal settings
-static struct termios stored_settings;
-
 struct candidate
 {
   char* src;
@@ -32,6 +21,25 @@ struct candidate
   char* note;
   char rec;
 };
+
+struct application_variables
+{
+  // paths and targets
+  char* server_dir;
+  ssize_t server_dir_length;
+  char* showboard_dir;
+  ssize_t showboard_dir_length;
+  char sig[SIG_SIZE];
+  // charsets
+  char* id_char_set;
+  int   id_char_set_len;
+  // terminal settings
+  struct termios stored_settings;
+  struct candidate video;
+  struct candidate trumb;
+  struct candidate title;
+  struct candidate descr;
+} *papv;
 
 int init();
 int destroy();
@@ -60,76 +68,77 @@ int publish_candidate(const struct candidate* c, char* path);
 
 int main()
 {
+  struct application_variables apv;
+  papv = &apv;
+
   int rc = init();
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
-  struct candidate video, trumb, title, descr;
-
-  rc = find_candidates(&video, &trumb, &title, &descr);
+  rc = find_candidates(&apv.video, &apv.trumb, &apv.title, &apv.descr);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
   // Analyze file size and notify user if it empty or large then possible
-  check_video_candidate(&video);
-  check_trumb_candidate(&trumb);
-  check_title_candidate(&title);
-  check_descr_candidate(&descr);
+  check_video_candidate(&apv.video);
+  check_trumb_candidate(&apv.trumb);
+  check_title_candidate(&apv.title);
+  check_descr_candidate(&apv.descr);
 
   // Suggest user candidates
-  suggest_candidates(&video, &trumb, &title, &descr);
+  suggest_candidates(&apv.video, &apv.trumb, &apv.title, &apv.descr);
 
-  if (!video.src || video.rec == 'Y')
+  if (!apv.video.src || apv.video.rec == 'Y')
   {
-    rc = request_file_name(&video, "video");
+    rc = request_file_name(&apv.video, "video");
     if (rc != NO_ERRORS)
       return EXIT_FAILURE;
   }
-  if (!trumb.src || trumb.rec == 'Y')
+  if (!apv.trumb.src || apv.trumb.rec == 'Y')
   {
-    rc = request_file_name(&trumb, "trumbnail");
-    if (rc != NO_ERRORS)
-      return EXIT_FAILURE;
-  }
-
-  if (title.src && title.rec == 'Y')
-    title.rec = ask_yes_no("Would you like to change title file (Y/N)?");
-
-  if ( !title.src || (title.src && title.rec == 'Y') )
-  {
-    rc = request_file_name_or_it_contents(&title, "title", "title.txt", SMALL_BUFFER_SIZE);
+    rc = request_file_name(&apv.trumb, "trumbnail");
     if (rc != NO_ERRORS)
       return EXIT_FAILURE;
   }
 
-  if (descr.src && descr.rec == 'Y')
-    descr.rec = ask_yes_no("Would you like to change description file (Y/N)?");
+  if (apv.title.src && apv.title.rec == 'Y')
+    apv.title.rec = ask_yes_no("Would you like to change title file (Y/N)?");
 
-  if ( !descr.src || (descr.src && descr.rec == 'Y') )
+  if ( !apv.title.src || (apv.title.src && apv.title.rec == 'Y') )
   {
-    rc = request_file_name_or_it_contents(&descr, "description", "descr.html", STANDARD_BUFFER_SIZE);
+    rc = request_file_name_or_it_contents(&apv.title, "title", "title.txt", SMALL_BUFFER_SIZE);
     if (rc != NO_ERRORS)
       return EXIT_FAILURE;
   }
 
-  char sig[SIG_SIZE];
-  rc = make_signature(&video, sig);
+  if (apv.descr.src && apv.descr.rec == 'Y')
+    apv.descr.rec = ask_yes_no("Would you like to change description file (Y/N)?");
+
+  if ( !apv.descr.src || (apv.descr.src && apv.descr.rec == 'Y') )
+  {
+    rc = request_file_name_or_it_contents(&apv.descr, "description", "descr.html", STANDARD_BUFFER_SIZE);
+    if (rc != NO_ERRORS)
+      return EXIT_FAILURE;
+  }
+
+
+  rc = make_signature(&apv.video, apv.sig);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
   //strcpy(buf, "28badc69dc9e82a51ee885122552ad1c");
   //memcpy(sig, buf, SIG_SIZE);
 
-  rc = check_directory(showboard_dir);
+  rc = check_directory(apv.showboard_dir);
   if (rc == NOT_FOUND)
-    rc = make_directory(showboard_dir);
+    rc = make_directory(apv.showboard_dir);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
   char buf[PATH_MAX];
-  strcpy(buf, showboard_dir);
-  memcpy(buf + showboard_dir_length, sig, SIG_SIZE);
-  buf[showboard_dir_length + SIG_SIZE] = '\0';
+  strcpy(buf, apv.showboard_dir);
+  memcpy(buf + apv.showboard_dir_length, apv.sig, SIG_SIZE);
+  buf[apv.showboard_dir_length + SIG_SIZE] = '\0';
   rc = check_directory(buf);
   if (rc == NOT_FOUND)
     rc = make_directory(buf);
@@ -137,10 +146,10 @@ int main()
     return EXIT_FAILURE;
 
   // Calculate id
-  buf[showboard_dir_length + SIG_SIZE] = '/';
-  buf[showboard_dir_length + SIG_SIZE + 1] = '\0';
+  buf[apv.showboard_dir_length + SIG_SIZE] = '/';
+  buf[apv.showboard_dir_length + SIG_SIZE + 1] = '\0';
 
-  rc = check_duplicates(&video, buf);
+  rc = check_duplicates(&apv.video, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
@@ -150,52 +159,25 @@ int main()
     return EXIT_FAILURE;
 
   // Move files into showboard
-  buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '/';
-  buf[showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1] = '\0';
+  buf[apv.showboard_dir_length + SIG_SIZE + 1 + ID_SIZE] = '/';
+  buf[apv.showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1] = '\0';
 
-  rc = publish_candidate(&video, buf);
+  rc = publish_candidate(&apv.video, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
-  rc = publish_candidate(&trumb, buf);
+  rc = publish_candidate(&apv.trumb, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
-  rc = publish_candidate(&title, buf);
+  rc = publish_candidate(&apv.title, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
-  rc = publish_candidate(&descr, buf);
+  rc = publish_candidate(&apv.descr, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
 
-  // Local destroy
-  if (descr.note)
-    free(descr.note);
-  if (title.note)
-    free(title.note);
-  if (trumb.note)
-    free(trumb.note);
-  if (video.note)
-    free(video.note);
-  if (descr.target)
-    free(descr.target);
-  if (title.target)
-    free(title.target);
-  if (trumb.target)
-    free(trumb.target);
-  if (video.target)
-    free(video.target);
-  if (descr.src)
-    free(descr.src);
-  if (title.src)
-    free(title.src);
-  if (trumb.src)
-    free(trumb.src);
-  if (video.src)
-    free(video.src);
-
-  // Global destroy
   rc = destroy();
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
@@ -207,35 +189,35 @@ int main()
 int init()
 {
   // paths
-  server_dir = malloc(PATH_MAX);
-  if (!server_dir)
+  papv->server_dir = malloc(PATH_MAX);
+  if (!papv->server_dir)
     return MALLOC_FAILED;
-  server_dir_length = readlink("/proc/self/exe", server_dir, PATH_MAX - 1);
-  if (server_dir_length == -1)
+  papv->server_dir_length = readlink("/proc/self/exe", papv->server_dir, PATH_MAX - 1);
+  if (papv->server_dir_length == -1)
     return READ_LINK_ERROR;
-  while (server_dir_length > 0 && server_dir[server_dir_length - 1] != '/') server_dir_length--;
-  if (!server_dir_length)
+  while (papv->server_dir_length > 0 && papv->server_dir[papv->server_dir_length - 1] != '/') papv->server_dir_length--;
+  if (!papv->server_dir_length)
     return PATH_INVALID;
-  server_dir[server_dir_length] = '\0';
-  server_dir = realloc(server_dir, server_dir_length + 1);
-  if (!server_dir)
+  papv->server_dir[papv->server_dir_length] = '\0';
+  papv->server_dir = realloc(papv->server_dir, papv->server_dir_length + 1);
+  if (!papv->server_dir)
     return MALLOC_FAILED;
 
-  showboard_dir_length = server_dir_length + strlen("showboard/");
-  if (showboard_dir_length + 1 > PATH_MAX)
+  papv->showboard_dir_length = papv->server_dir_length + strlen("showboard/");
+  if (papv->showboard_dir_length + 1 > PATH_MAX)
     return PATH_OVERFLOW;
-  showboard_dir = malloc(showboard_dir_length + 1);
-  if (!showboard_dir)
+  papv->showboard_dir = malloc(papv->showboard_dir_length + 1);
+  if (!papv->showboard_dir)
     return MALLOC_FAILED;
-  strcpy(showboard_dir, server_dir);
-  strcpy(showboard_dir + server_dir_length, "showboard/");
+  strcpy(papv->showboard_dir, papv->server_dir);
+  strcpy(papv->showboard_dir + papv->server_dir_length, "showboard/");
 
   // store terminal settings
-  tcgetattr(0, &stored_settings);
+  tcgetattr(0, &papv->stored_settings);
 
   // charsets
-  id_char_set = strdup(ID_CHARS);
-  id_char_set_len = strlen(id_char_set);
+  papv->id_char_set = strdup(ID_CHARS);
+  papv->id_char_set_len = strlen(papv->id_char_set);
 
   // random generator
   struct timeval tv;
@@ -247,15 +229,43 @@ int init()
 
 int destroy()
 {
+  // candidates
+  if (papv->descr.note)
+    free(papv->descr.note);
+  if (papv->title.note)
+    free(papv->title.note);
+  if (papv->trumb.note)
+    free(papv->trumb.note);
+  if (papv->video.note)
+    free(papv->video.note);
+
+  if (papv->descr.target)
+    free(papv->descr.target);
+  if (papv->title.target)
+    free(papv->title.target);
+  if (papv->trumb.target)
+    free(papv->trumb.target);
+  if (papv->video.target)
+    free(papv->video.target);
+
+  if (papv->descr.src)
+    free(papv->descr.src);
+  if (papv->title.src)
+    free(papv->title.src);
+  if (papv->trumb.src)
+    free(papv->trumb.src);
+  if (papv->video.src)
+    free(papv->video.src);
+
   // charsets
-  if (id_char_set)
-    free(id_char_set);
+  if (papv->id_char_set)
+    free(papv->id_char_set);
 
   // paths
-  if (server_dir)
-    free(server_dir);
-  if (showboard_dir)
-    free(showboard_dir);
+  if (papv->server_dir)
+    free(papv->server_dir);
+  if (papv->showboard_dir)
+    free(papv->showboard_dir);
   return NO_ERRORS;
 }
 
@@ -297,7 +307,7 @@ int strcmp_ncase(const char* str1, const char* str2)
 
 void set_keypress()
 {
-  struct termios new_settings = stored_settings;
+  struct termios new_settings = papv->stored_settings;
 
   // Disable canonical mode, and set buffer size to 1 byte
   new_settings.c_lflag &= (~ICANON);
@@ -309,7 +319,7 @@ void set_keypress()
 
 void reset_keypress()
 {
-  tcsetattr(0, TCSANOW, &stored_settings);
+  tcsetattr(0, TCSANOW, &papv->stored_settings);
 }
 
 /* Scan current folder and try to find:
@@ -1080,7 +1090,7 @@ int make_id_directory(char* path)
   while (attempts < MAX_CREATE_ID_DIR_ATTEMPTS)
   {
     for (int i = 0; i < ID_SIZE; i++)
-      path[length + i] = (char)id_char_set[(int) ( (double)id_char_set_len * rand() / RAND_MAX )];
+      path[length + i] = (char)papv->id_char_set[(int) ( (double)papv->id_char_set_len * rand() / RAND_MAX )];
     path[length + ID_SIZE] = '\0';
 
     rc = check_directory(path);
