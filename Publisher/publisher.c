@@ -5,11 +5,9 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-//#include <signal.h>
 #include <dirent.h> // DIR, struct dirent, PATH_MAX
 #include <fcntl.h>
 #include <sys/stat.h>
-//#include <linux/limits.h> // PATH_MAX
 #include <termios.h> // non-canonical mode for terminal, struct termios, tcgetattr, tcsetattr
 #include <sys/time.h> // timeval, gettimeofday
 #include "defines.h"
@@ -35,6 +33,7 @@ struct application_variables
   int   id_char_set_len;
   // terminal settings
   struct termios stored_settings;
+  // candidates
   struct candidate video;
   struct candidate trumb;
   struct candidate title;
@@ -56,15 +55,17 @@ int check_title_candidate(struct candidate*);
 int check_descr_candidate(struct candidate*);
 int request_file_name(struct candidate* c, const char* label);
 int request_file_name_or_it_contents(struct candidate* c, const char* label, const char* default_file_name, const ssize_t limit);
+int make_targets(struct candidate*, struct candidate*, struct candidate*, struct candidate*);
 char ask_yes_no(const char*);
-int make_signature(const struct candidate* c, char* sig);
+int make_signature(const struct candidate*, char*);
 int check_directory(const char*);
 int make_directory(const char*);
-int check_duplicates(const struct candidate* c, char* path);
-int test_file(const char* path);
-int filescmp(const char* path1, const char* path2);
-int make_id_directory(char* path);
-int publish_candidate(const struct candidate* c, char* path);
+int check_duplicates(const struct candidate*, char*);
+int test_file(const char*);
+int filecmp(const char*, const char*);
+int make_id_directory(char*);
+int publish_candidate(const struct candidate*, char*);
+char* ext_fgets(char*, int, FILE*);
 
 int main()
 {
@@ -121,13 +122,13 @@ int main()
       return EXIT_FAILURE;
   }
 
+  rc = make_targets(&apv.video, &apv.trumb, &apv.title, &apv.descr);
+  if (rc != NO_ERRORS)
+    return EXIT_FAILURE;
 
   rc = make_signature(&apv.video, apv.sig);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-
-  //strcpy(buf, "28badc69dc9e82a51ee885122552ad1c");
-  //memcpy(sig, buf, SIG_SIZE);
 
   rc = check_directory(apv.showboard_dir);
   if (rc == NOT_FOUND)
@@ -152,7 +153,6 @@ int main()
   rc = check_duplicates(&apv.video, buf);
   if (rc != NO_ERRORS)
     return EXIT_FAILURE;
-
 
   rc = make_id_directory(buf);
   if (rc != NO_ERRORS)
@@ -211,6 +211,23 @@ int init()
     return MALLOC_FAILED;
   strcpy(papv->showboard_dir, papv->server_dir);
   strcpy(papv->showboard_dir + papv->server_dir_length, "showboard/");
+
+  papv->video.src = NULL;
+  papv->video.target = NULL;
+  papv->video.note = NULL;
+  papv->video.rec = 'N';
+  papv->trumb.src = NULL;
+  papv->trumb.target = NULL;
+  papv->trumb.note = NULL;
+  papv->trumb.rec = 'N';
+  papv->title.src = NULL;
+  papv->title.target = NULL;
+  papv->title.note = NULL;
+  papv->title.rec = 'N';
+  papv->descr.src = NULL;
+  papv->descr.target = NULL;
+  papv->descr.note = NULL;
+  papv->descr.rec = 'N';
 
   // store terminal settings
   tcgetattr(0, &papv->stored_settings);
@@ -302,7 +319,7 @@ int strcmp_ncase(const char* str1, const char* str2)
   else if (*str2 == '\0')
     return -1;
 
-  return -5;
+  return UNKNOWN_ERROR;
 }
 
 void set_keypress()
@@ -323,22 +340,22 @@ void reset_keypress()
 }
 
 /* Scan current folder and try to find:
-    a) Video candidate (in high priority order)
+    a) Video candidate (listed in high priority order)
         1) video.mp4
         2) video.webm
         3) *.mp4, *.webm
-    b) Trumbnail candidate (in high priority order)
+    b) Trumbnail candidate (listed in high priority order)
         1) trumb.png
         2) trumb.jpg, trumb.jpeg
         3) trumb.webp
         4) *.png
         5) *.jpg, *.jpeg
         6) *.webp
-    c) Title candidate (in high priority order)
+    c) Title candidate (listed in high priority order)
         1) title.txt, title.text
         2) title.htm, title.html
         3) *.txt, *.text
-    d) Description candidate (in high priority order)
+    d) Description candidate (listed in high priority order)
         1) descr.htm, descr.html
         2) descr.txt, descr.text
         3) *.htm, *.html
@@ -364,105 +381,85 @@ int find_candidates(struct candidate* video, struct candidate* trumb, struct can
       length = strlen(entry->d_name);
 
       if (!video->src &&
-                         (  strcmp_ncase(entry->d_name, "video.mp4") == 0 ||
-                            strcmp_ncase(entry->d_name, "video.webm") == 0 ||
-                            (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".mp4") == 0) ||
-                            (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".webm") == 0)
+                         (
+                          strcmp_ncase(entry->d_name, "video.mp4") == 0 ||
+                          strcmp_ncase(entry->d_name, "video.webm") == 0 ||
+                          (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".mp4") == 0) ||
+                          (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".webm") == 0)
                          )
          )
       {
         video->src = strdup(entry->d_name);
-        if (strcmp_ncase(entry->d_name + length - 4, ".mp4") == 0)
-          video->target = strdup("video.mp4");
-        else
-          video->target = strdup("video.webm");
         continue;
       }
-      else if ( video->src && strcmp_ncase(entry->d_name, "video.webm") == 0 && !(strcmp(video->target, "video.mp4") == 0) )
+      else if ( video->src && strcmp_ncase(entry->d_name, "video.webm") == 0 && !(strcmp_ncase(video->src, "video.mp4") == 0) )
       {
         free(video->src);
-        free(video->target);
         video->src = strdup(entry->d_name);
-        video->target = strdup("video.webm");
         continue;
       }
       else if ( video->src && strcmp_ncase(entry->d_name, "video.mp4") == 0 )
       {
         free(video->src);
-        free(video->target);
         video->src = strdup(entry->d_name);
-        video->target = strdup("video.mp4");
         continue;
       }
 
       // Trumbs
       if (!trumb->src &&
-                         (  strcmp_ncase(entry->d_name, "trumb.png") == 0 ||
-                            strcmp_ncase(entry->d_name, "trumb.jpg") == 0 ||
-                            strcmp_ncase(entry->d_name, "trumb.jpeg") == 0 ||
-                            strcmp_ncase(entry->d_name, "trumb.webp") == 0 ||
-                            (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".png") == 0) ||
-                            (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".jpg") == 0) ||
-                            (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".jpeg") == 0) ||
-                            (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".webp") == 0)
+                         (
+                          strcmp_ncase(entry->d_name, "trumb.png") == 0 ||
+                          strcmp_ncase(entry->d_name, "trumb.jpg") == 0 ||
+                          strcmp_ncase(entry->d_name, "trumb.jpeg") == 0 ||
+                          strcmp_ncase(entry->d_name, "trumb.webp") == 0 ||
+                          (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".png") == 0) ||
+                          (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".jpg") == 0) ||
+                          (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".jpeg") == 0) ||
+                          (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".webp") == 0)
                          )
          )
       {
         trumb->src = strdup(entry->d_name);
-        if (strcmp_ncase(entry->d_name + length - 4, ".png") == 0)
-          trumb->target = strdup("trumb.png");
-        else if (strcmp_ncase(entry->d_name + length - 4, ".jpg") == 0 || (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".jpeg") == 0))
-          trumb->target = strdup("trumb.jpg");
-        else
-          trumb->target = strdup("trumb.webp");
         continue;
       }
-      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.jpeg") == 0 && strcmp(trumb->target, "trumb.webp") == 0 )
+      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.jpeg") == 0 && strcmp_ncase(trumb->src, "trumb.webp") == 0 )
       {
         free(trumb->src);
-        free(trumb->target);
         trumb->src = strdup(entry->d_name);
-        trumb->target = strdup("trumb.jpg");
         continue;
       }
-      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.jpg") == 0 && strcmp(trumb->target, "trumb.webp") == 0 )
+      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.jpg") == 0 && strcmp_ncase(trumb->src, "trumb.webp") == 0 )
       {
         free(trumb->src);
-        free(trumb->target);
         trumb->src = strdup(entry->d_name);
-        trumb->target = strdup("trumb.jpg");
         continue;
       }
-      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.webp") == 0 && !(strcmp(trumb->target, "trumb.png") == 0 || strcmp(trumb->target, "trumb.jpg") == 0) )
+      else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.webp") == 0 && !(strcmp_ncase(trumb->src, "trumb.png") == 0 || strcmp_ncase(trumb->src, "trumb.jpg") == 0) )
       {
         free(trumb->src);
-        free(trumb->target);
         trumb->src = strdup(entry->d_name);
-        trumb->target = strdup("trumb.webp");
         continue;
       }
       else if ( trumb->src && strcmp_ncase(entry->d_name, "trumb.png") == 0 )
       {
         free(trumb->src);
-        free(trumb->target);
         trumb->src = strdup(entry->d_name);
-        trumb->target = strdup("trumb.png");
         continue;
       }
 
       // Titles
       if (!title->src &&
-                         (  strcmp_ncase(entry->d_name, "title.txt") == 0 ||
-                            strcmp_ncase(entry->d_name, "title.text") == 0 ||
-                            strcmp_ncase(entry->d_name, "title.html") == 0 ||
-                            strcmp_ncase(entry->d_name, "title.htm") == 0 ||
-                            (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".txt") == 0) ||
-                            (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".text") == 0)
+                         (
+                          strcmp_ncase(entry->d_name, "title.txt") == 0 ||
+                          strcmp_ncase(entry->d_name, "title.text") == 0 ||
+                          strcmp_ncase(entry->d_name, "title.html") == 0 ||
+                          strcmp_ncase(entry->d_name, "title.htm") == 0 ||
+                          (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".txt") == 0) ||
+                          (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".text") == 0)
                          )
          )
       {
         title->src = strdup(entry->d_name);
-        title->target = strdup("title.txt");
         continue;
       }
       else if ( title->src &&
@@ -485,27 +482,24 @@ int find_candidates(struct candidate* video, struct candidate* trumb, struct can
 
       // Descriptions
       if ( !descr->src &&
-                          (  strcmp_ncase(entry->d_name, "descr.htm") == 0 ||
-                             strcmp_ncase(entry->d_name, "descr.html") == 0 ||
-                             strcmp_ncase(entry->d_name, "descr.txt") == 0 ||
-                             strcmp_ncase(entry->d_name, "descr.text") == 0 ||
-                             (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".htm") == 0) ||
-                             (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".html") == 0) ||
-                             (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".txt") == 0) ||
-                             (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".text") == 0)
+                          (
+                           strcmp_ncase(entry->d_name, "descr.htm") == 0 ||
+                           strcmp_ncase(entry->d_name, "descr.html") == 0 ||
+                           strcmp_ncase(entry->d_name, "descr.txt") == 0 ||
+                           strcmp_ncase(entry->d_name, "descr.text") == 0 ||
+                           (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".htm") == 0) ||
+                           (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".html") == 0) ||
+                           (length >= 4 && strcmp_ncase(entry->d_name + length - 4, ".txt") == 0) ||
+                           (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".text") == 0)
                           )
         )
       {
         descr->src = strdup(entry->d_name);
-        if (strcmp_ncase(entry->d_name + length - 4, ".htm") == 0 || (length >= 5 && strcmp_ncase(entry->d_name + length - 5, ".html") == 0))
-          descr->target = strdup("descr.html");
-        else
-          descr->target = strdup("descr.txt");
         continue;
       }
       else if ( descr->src &&
                 (strcmp_ncase(entry->d_name, "descr.text") == 0 || strcmp_ncase(entry->d_name, "descr.txt") == 0) &&
-                !(strcmp(descr->target, "descr.html") == 0)
+                !(strcmp_ncase(descr->src, "descr.html") == 0)
               )
       {
         free(descr->src);
@@ -517,9 +511,7 @@ int find_candidates(struct candidate* video, struct candidate* trumb, struct can
               )
       {
         free(descr->src);
-        free(descr->target);
         descr->src = strdup(entry->d_name);
-        descr->target = strdup("descr.html");
         continue;
       }
     }
@@ -565,17 +557,8 @@ int suggest_candidates(struct candidate* video, struct candidate* trumb, struct 
     printf("\n");
 
     // Accept user choice
-    char yes_no = 'X';
-    video->rec = trumb->rec = title->rec = descr->rec = 'N';
-    while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n')
-    {
-      printf("Is this information correct (Y/N)?: ");
-      set_keypress();
-      yes_no = fgetc(stdin);
-      reset_keypress();
-      printf("\n");
-    }
-    if (yes_no != 'Y' && yes_no != 'y')
+    char yes_no = ask_yes_no("Is this information correct (Y/N)?");
+    if (yes_no != 'Y')
       video->rec = trumb->rec = title->rec = descr->rec = 'Y';
   }
   return NO_ERRORS;
@@ -586,7 +569,7 @@ int check_video_candidate(struct candidate* c)
   struct stat st;
   if (c->src)
   {
-    if ( stat(c->src, &st) == -1)
+    if (stat(c->src, &st) == -1)
     {
       fprintf(stderr, "check_video_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
       if (c->note)
@@ -609,7 +592,7 @@ int check_trumb_candidate(struct candidate* c)
   struct stat st;
   if (c->src)
   {
-    if ( stat(c->src, &st) == -1)
+    if (stat(c->src, &st) == -1)
     {
       fprintf(stderr, "check_trumb_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
       if (c->note)
@@ -638,7 +621,7 @@ int check_title_candidate(struct candidate* c)
   struct stat st;
   if (c->src)
   {
-    if ( stat(c->src, &st) == -1)
+    if (stat(c->src, &st) == -1)
     {
       fprintf(stderr, "check_title_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
       if (c->note)
@@ -667,7 +650,7 @@ int check_descr_candidate(struct candidate* c)
   struct stat st;
   if (c->src)
   {
-    if ( stat(c->src, &st) == -1)
+    if (stat(c->src, &st) == -1)
     {
       fprintf(stderr, "check_descr_candidate->src (%s) stat failed (%s).\n", c->src, strerror(errno));
       if (c->note)
@@ -711,10 +694,10 @@ int request_file_name(struct candidate* c, const char* label)
     //   "/full/path/to/file_name"
     // And this will not work
     //   "~/path/to/file_name"
-    retstr = fgets(buf, sizeof(buf), stdin);
+    retstr = ext_fgets(buf, sizeof(buf), stdin);
     if (retstr == NULL) // error or EOF
     {
-      fprintf(stderr, "request_file_name: fgets returned NULL (%s).\n", strerror(errno));
+      fprintf(stderr, "request_file_name: ext_fgets returned NULL (%s).\n", strerror(errno));
       return UNKNOWN_ERROR;
     }
 
@@ -749,10 +732,7 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
   ssize_t length;
   struct stat st;
 
-  if (limit > PATH_MAX)
-    buf = malloc(limit);
-  else
-    buf = malloc(PATH_MAX);
+  buf = malloc(limit > PATH_MAX ? limit : PATH_MAX);
 
   if (!buf)
   {
@@ -771,10 +751,10 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
     //   "/full/path/to/file_name"
     // And this will not work
     //   "~/path/to/file_name"
-    retstr = fgets(buf, PATH_MAX, stdin);
+    retstr = ext_fgets(buf, PATH_MAX, stdin);
     if (retstr == NULL) // error or EOF
     {
-      fprintf(stderr, "request_file_name_or_it_contents: fgets returned NULL (%s).\n", strerror(errno));
+      fprintf(stderr, "request_file_name_or_it_contents: ext_fgets returned NULL (%s).\n", strerror(errno));
       rc = UNKNOWN_ERROR;
       break;
     }
@@ -797,7 +777,7 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
 
       // create file
       mode_t mode = S_IRUSR | S_IWUSR| S_IRGRP | S_IWGRP | S_IROTH;
-      int fd = open(c->src, O_WRONLY | O_EXCL | O_CREAT, mode);
+      int fd = open(c->src, O_WRONLY | O_CREAT, mode);
       if (fd == -1)
       {
         fprintf(stderr, "request_file_name_or_it_contents: create \"%s\" file error (%s).\n", default_file_name, strerror(errno));
@@ -807,10 +787,11 @@ int request_file_name_or_it_contents(struct candidate* c, const char* label, con
       else
       {
         printf("Prompt %s contents (max %ld chars): ", label, limit - 1);
-        retstr = fgets(buf, limit - 1, stdin);
+        retstr = ext_fgets(buf, limit, stdin);
         if (retstr == NULL) // error or EOF
         {
-          fprintf(stderr, "request_file_name_or_it_contents: fgets returned NULL (%s).\n", strerror(errno));
+          fprintf(stderr, "request_file_name_or_it_contents: ext_fgets returned NULL (%s).\n", strerror(errno));
+          close(fd);
           rc = UNKNOWN_ERROR;
           break;
         }
@@ -852,6 +833,11 @@ char ask_yes_no(const char* question)
     printf("\n");
   }
   while (yes_no != 'Y' && yes_no != 'y' && yes_no != 'N' && yes_no != 'n');
+  if (yes_no == 'y')
+    yes_no = 'Y';
+  else if (yes_no == 'n')
+    yes_no = 'N';
+
   return yes_no;
 }
 
@@ -967,16 +953,18 @@ int check_duplicates(const struct candidate* c, char* path)
 
   if ((cur_dir = opendir(path)) != NULL)
   {
+    length = strlen(path);
     while ((entry = readdir(cur_dir)) != NULL)
     {
-      length = strlen(entry->d_name);
-      if (length == ID_SIZE && strspn(entry->d_name, ID_CHARS) == ID_SIZE)
+      if (strlen(entry->d_name) == ID_SIZE && strspn(entry->d_name, ID_CHARS) == ID_SIZE)
       {
-        length = strlen(path);
-        strcpy(path + length, "video.mp4");
+        strcpy(path + length, entry->d_name);
+        path[length + ID_SIZE] = '/';
+
+        strcpy(path + length + ID_SIZE + 1, "video.mp4");
         if (test_file(path) == NO_ERRORS)
         {
-          if (filescmp(c->src, path) == 0)
+          if (filecmp(c->src, path) == 0)
           {
             printf("Same video file already published on %s\n", path);
             yes_no = ask_yes_no("Do you want to publish it anyway (Y/N)?");
@@ -986,14 +974,14 @@ int check_duplicates(const struct candidate* c, char* path)
           }
         }
 
-        strcpy(path + length, "video.webm");
+        strcpy(path + length + ID_SIZE + 1, "video.webm");
         if (test_file(path) == NO_ERRORS)
         {
-          if (filescmp(c->src, path) == 0)
+          if (filecmp(c->src, path) == 0)
           {
             printf("Same video file already published on %s\n", path);
             yes_no = ask_yes_no("Do you want to publish it anyway (Y/N)?");
-            if (yes_no == 'N' || yes_no == 'n')
+            if (yes_no == 'N')
               rc = DUPLICATE_FOUND;
             break;
           }
@@ -1031,7 +1019,7 @@ int test_file(const char* path)
   return NO_ERRORS;
 }
 
-int filescmp(const char* path1, const char* path2)
+int filecmp(const char* path1, const char* path2)
 {
   struct stat st1, st2;
   int rc1, rc2;
@@ -1050,7 +1038,10 @@ int filescmp(const char* path1, const char* path2)
       return UNKNOWN_ERROR;
     fd2 =  open(path2, O_RDONLY);
     if (fd2 == -1)
+    {
+      close(fd1);
       return UNKNOWN_ERROR;
+    }
 
     do
     {
@@ -1059,23 +1050,35 @@ int filescmp(const char* path1, const char* path2)
       if (read_byte1 < 0 || read_byte2 < 0)
         break;
       if (read_byte1 > read_byte2)
+      {
+        close(fd1);
+        close(fd2);
         return 1;
+      }
       else if (read_byte1 < read_byte2)
+      {
+        close(fd1);
+        close(fd2);
         return -1;
-      else if (read_byte1 == read_byte2)
+      }
+      else if (read_byte1 == read_byte2 && read_byte1 != 0)
       {
         rc1 = memcmp(buf1, buf2, read_byte1);
         if (rc1 != 0)
+        {
+          close(fd1);
+          close(fd2);
           return rc1;
+        }
       }
     }
     while (read_byte1 != 0 || read_byte2 != 0);
 
-    if (rc1 == 0)
-      return 0;
-
     close(fd1);
     close(fd2);
+
+    if (rc1 == 0)
+      return 0;
   }
 
   return UNKNOWN_ERROR;
@@ -1083,8 +1086,7 @@ int filescmp(const char* path1, const char* path2)
 
 int make_id_directory(char* path)
 {
-  ssize_t length;
-  length = strlen(path);
+  ssize_t length = strlen(path);
   int rc, attempts = 0;
 
   while (attempts < MAX_CREATE_ID_DIR_ATTEMPTS)
@@ -1103,8 +1105,9 @@ int make_id_directory(char* path)
     else if (rc == NO_ERRORS) // Dir already exists
     {
       struct stat st;
+      path[length + ID_SIZE] = '/';
 
-      strcpy(path + length + ID_SIZE, "video.mp4");
+      strcpy(path + length + ID_SIZE + 1, "video.mp4");
       rc = stat(path, &st);
       if (rc == 0 && S_ISREG(st.st_mode))
       {
@@ -1112,7 +1115,7 @@ int make_id_directory(char* path)
         continue;
       }
 
-      strcpy(path + length + ID_SIZE, "video.webm");
+      strcpy(path + length + ID_SIZE + 1, "video.webm");
       rc = stat(path, &st);
       if (rc == 0 && S_ISREG(st.st_mode))
       {
@@ -1144,4 +1147,39 @@ int publish_candidate(const struct candidate* c, char* path)
   path[length] = '\0';
 
   return rc;
+}
+
+int make_targets(struct candidate* video, struct candidate* trumb, struct candidate* title, struct candidate* descr)
+{
+  char* pos = strrchr(video->src, '.');
+  if (pos && strcmp_ncase(pos, ".webm") == 0)
+    video->target = strdup("video.webm");
+  else
+    video->target = strdup("video.mp4");
+
+  pos = strrchr(trumb->src, '.');
+  if (pos && strcmp_ncase(pos, ".webp") == 0)
+    trumb->target = strdup("trumb.webp");
+  else if (pos && (strcmp_ncase(pos, ".jpg") == 0 || strcmp_ncase(pos, ".jpeg") == 0))
+    trumb->target = strdup("trumb.jpg");
+  else
+    trumb->target = strdup("trumb.png");
+
+  title->target = strdup("title.txt");
+
+  pos = strrchr(descr->src, '.');
+  if (pos && (strcmp_ncase(pos, ".txt") == 0 || strcmp_ncase(pos, ".text") == 0))
+    descr->target = strdup("descr.txt");
+  else
+    descr->target = strdup("descr.html");
+
+  return NO_ERRORS;
+}
+
+char* ext_fgets(char *s, int size, FILE* stream)
+{
+  char *retstr = fgets(s, size, stream);
+  if (retstr && (strlen(retstr) == size - 1) && retstr[size - 2] != '\n')
+    while (getchar() != '\n');
+  return retstr;
 }
