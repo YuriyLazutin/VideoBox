@@ -324,7 +324,7 @@ int process_connection(int conn)
 
   if (iError == NO_ERRORS)
   {
-    method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 5);
+    method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
     if (!method && bytes_read == 0)
       iError = CONNECTION_CLOSED;
   }
@@ -354,7 +354,7 @@ int process_connection(int conn)
   if (iError == NO_ERRORS)
   {
     char* strline = NULL;
-    size_t len = 0;
+    ssize_t len = 0;
 
     do
     {
@@ -588,16 +588,15 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   while (**pos == ' ')
   {
     cnt = 0;
-    do
+    while (cnt < *bytes_read && total_cnt + cnt < read_limit && **pos == ' ')
     {
       (*pos)++;
       cnt++;
     }
-    while (cnt < *bytes_read && **pos == ' ');
 
     total_cnt += cnt;
 
-    if (total_cnt > read_limit)
+    if (cnt < *bytes_read && total_cnt == read_limit && **pos == ' ')
     {
       #ifndef NDEBUG
       log_print("Limit exceeded while skip spaces\n");
@@ -646,16 +645,15 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   while (**pos != ' ' && **pos != '\r' && **pos != '\n')
   {
     cnt = 0;
-    do
+    while (cnt < *bytes_read && word_len + cnt < read_limit && **pos != ' ' && **pos != '\r' && **pos != '\n')
     {
       (*pos)++;
       cnt++;
     }
-    while (cnt < *bytes_read && **pos != ' ' && **pos != '\r' && **pos != '\n');
 
     word_len += cnt;
 
-    if (word_len + 1 > read_limit)
+    if (cnt < *bytes_read && word_len == read_limit && **pos != ' ' && **pos != '\r' && **pos != '\n')
     {
       if (result)
         free(result);
@@ -725,16 +723,15 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   while (**pos != '\n')
   {
     cnt = 0;
-    do
+    while (cnt < *bytes_read && total_read + cnt < read_limit && **pos != '\n')
     {
       (*pos)++;
       cnt++;
     }
-    while (cnt < *bytes_read && **pos != '\n');
 
     total_read += cnt;
 
-    if (total_read + 1 > read_limit)
+    if (cnt < *bytes_read && total_read == read_limit && **pos != '\n')
     {
       if (result)
         free(result);
@@ -793,7 +790,7 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
   if (result)
   {
-    if (result[total_read] == '\r')
+    if (result[total_read-1] == '\r')
       total_read--;
     *(result + total_read) = '\0';
   }
@@ -1070,7 +1067,8 @@ void send_bad_request(const int conn)
     "Content-type: text/html\n"
     "\n";
 
-  write(conn, bad_request_response, strlen(bad_request_response));
+  ssize_t lenght = strlen(bad_request_response);
+  write_block(conn, bad_request_response, lenght);
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", bad_request_response);
@@ -1090,7 +1088,8 @@ void send_request_timeout(const int conn)
     " </body>\n"
     "</html>\n";
 
-  write(conn, timeout_response, strlen(timeout_response));
+  ssize_t lenght = strlen(timeout_response);
+  write_block(conn, timeout_response, lenght);
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", timeout_response);
@@ -1104,7 +1103,8 @@ void send_bad_method(const int conn)
     "Content-type: text/html\n"
     "\n";
 
-  write(conn, bad_method_response, strlen(bad_method_response));
+  ssize_t lenght = strlen(bad_method_response);
+  write_block(conn, bad_method_response, lenght);
   #ifndef NDEBUG
     log_print("Sended to client:\n");
     log_print("%s", bad_method_response);

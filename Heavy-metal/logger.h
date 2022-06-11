@@ -17,5 +17,6 @@ void server_log_init();
 void connection_log_init(int);
 void log_close();
 void log_print(char*, ...);
+extern int close_descriptor(int d);
 
 #endif // LOGGER_H
