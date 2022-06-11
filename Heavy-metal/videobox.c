@@ -471,6 +471,7 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
     #ifndef NDEBUG
       log_print("read_block: poll error (%s)\n", strerror(errno));
     #endif
+    return -1 * POLL_ERROR;
   }
   else if (rc == 0)
   {
@@ -537,6 +538,7 @@ ssize_t write_block(const int conn, const char* buf, const ssize_t count)
     #ifndef NDEBUG
       log_print("write_block: poll error (%s)\n", strerror(errno));
     #endif
+    return -1 * POLL_ERROR;
   }
   else if (rc == 0)
   {
@@ -585,6 +587,20 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 {
   ssize_t cnt, total_cnt = 0;
 
+  if (*bytes_read == 0)
+  {
+    *bytes_read = read_block(conn, buf, buf_size);
+    if (*bytes_read < 0)
+    {
+      #ifndef NDEBUG
+        log_print("Read block error while skip_spaces\n");
+      #endif
+      *bytes_read = 0;
+      return -1 * *bytes_read;
+    }
+    *pos = buf;
+  }
+
   while (**pos == ' ')
   {
     cnt = 0;
@@ -608,26 +624,12 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read == -1 * TIME_OUT)
-      {
-        #ifndef NDEBUG
-          log_print("Time out while skip spaces\n");
-        #endif
-        return TIME_OUT;
-      }
-      else if (*bytes_read < 0)
+      if (*bytes_read < 0)
       {
         #ifndef NDEBUG
           log_print("Read block error while skip spaces\n");
         #endif
-        return READ_BLOCK_ERROR;
-      }
-      else if (*bytes_read == 0)
-      {
-        #ifndef NDEBUG
-          log_print("Point 1: received 0 bytes\n");
-        #endif
-        return CONNECTION_CLOSED;
+        return -1 * *bytes_read;
       }
       *pos = buf;
     }
@@ -641,6 +643,22 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 {
   char* result = NULL;
   ssize_t word_len = 0, cnt;
+
+  if (*bytes_read == 0)
+  {
+    *bytes_read = read_block(conn, buf, buf_size);
+    if (*bytes_read < 0)
+    {
+      #ifndef NDEBUG
+        log_print("Read block error while read_word\n");
+      #endif
+      *bytes_read = 0;
+      if (result)
+        free(result);
+      return NULL;
+    }
+    *pos = buf;
+  }
 
   while (**pos != ' ' && **pos != '\r' && **pos != '\n')
   {
@@ -677,16 +695,7 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read == -1 * TIME_OUT)
-      {
-        #ifndef NDEBUG
-          log_print("Time out while read word\n");
-        #endif
-        if (result)
-          free(result);
-        return NULL;
-      }
-      else if (*bytes_read < 0)
+      if (*bytes_read < 0)
       {
         #ifndef NDEBUG
           log_print("Read block error while read word\n");
@@ -694,15 +703,6 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
         if (result)
           free(result);
         return NULL;
-      }
-      else if (*bytes_read == 0)
-      {
-        #ifndef NDEBUG
-          log_print("Point 2: received 0 bytes\n");
-        #endif
-        if (result)
-          free(result);
-        break;
       }
       *pos = buf;
     }
@@ -719,6 +719,22 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 {
   char* result = NULL;
   ssize_t total_read = 0, cnt;
+
+  if (*bytes_read == 0)
+  {
+    *bytes_read = read_block(conn, buf, buf_size);
+    if (*bytes_read < 0)
+    {
+      #ifndef NDEBUG
+        log_print("Read block error while read_line\n");
+      #endif
+      *bytes_read = 0;
+      if (result)
+        free(result);
+      return NULL;
+    }
+    *pos = buf;
+  }
 
   while (**pos != '\n')
   {
@@ -752,35 +768,26 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     }
     memcpy(result + total_read - cnt, *pos - cnt, cnt);
 
+    if (**pos == '\n')
+    {
+      (*pos)++;
+      cnt++;
+      *bytes_read -= cnt;
+      break;
+    }
+
     if (cnt == *bytes_read)
     {
       *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read == -1 * TIME_OUT)
-      {
-        #ifndef NDEBUG
-          log_print("Time out while read_line\n");
-        #endif
-        if (result)
-          free(result);
-        return NULL;
-      }
-      else if (*bytes_read < 0)
+      if (*bytes_read < 0)
       {
         #ifndef NDEBUG
           log_print("Read block error while read_line\n");
         #endif
+        *bytes_read = 0;
         if (result)
           free(result);
         return NULL;
-      }
-      else if (*bytes_read == 0)
-      {
-        #ifndef NDEBUG
-          log_print("read_line: received 0 bytes\n");
-        #endif
-        if (result)
-          free(result);
-        break;
       }
       *pos = buf;
     }
@@ -799,6 +806,20 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
 int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
 {
+  if (*bytes_read == 0)
+  {
+    *bytes_read = read_block(conn, buf, buf_size);
+    if (*bytes_read < 0)
+    {
+      #ifndef NDEBUG
+        log_print("Read block error while read_str\n");
+      #endif
+      *bytes_read = 0;
+      return -1 * *bytes_read;
+    }
+    *pos = buf;
+  }
+
   ssize_t total_read = *bytes_read;
   int i = 0, n = strlen(str), m;
   char* pstr;
@@ -824,30 +845,16 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
     *pos = buf + i;
 
     *bytes_read = read_block(conn, *pos, buf_size - i);
-    if (*bytes_read == -1 * TIME_OUT)
-      {
-        #ifndef NDEBUG
-          log_print("Time out while read str\n");
-        #endif
-        return TIME_OUT;
-      }
-      else if (*bytes_read < 0)
-      {
-        #ifndef NDEBUG
-          log_print("Read block error while read str\n");
-        #endif
-        return READ_BLOCK_ERROR;
-      }
-      else if (*bytes_read == 0)
-      {
-       #ifndef NDEBUG
-          log_print("Point 3: received 0 bytes\n");
-        #endif
-        return CONNECTION_CLOSED;
-      }
-
-    total_read += *bytes_read;
+    if (*bytes_read < 0)
+    {
+      #ifndef NDEBUG
+        log_print("Read block error while read_str\n");
+      #endif
+      *bytes_read = 0;
+      return -1 * *bytes_read;
+    }
     *pos = buf;
+    total_read += *bytes_read;
     *bytes_read += m;
   }
 
@@ -885,27 +892,6 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
 
   do
   {
-    if (*bytes_read <= 0)
-    {
-      *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read == -1 * TIME_OUT)
-      {
-        log_print("Time out while read tail\n");
-        return;
-      }
-      else if (*bytes_read < 0)
-      {
-        log_print("Read block error while read tail\n");
-        return;
-      }
-      else if (*bytes_read == 0)
-      {
-        log_print("Point 4: received 0 bytes\n");
-        return;
-      }
-      *pos = buf;
-    }
-
     if (*bytes_read > 0)
     {
       if (cnt == 0)
@@ -913,30 +899,22 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
 
       log_print("%s", *pos);
       cnt += *bytes_read;
+      *bytes_read = 0;
 
       if (cnt > read_limit)
       {
         log_print("Limit exceeded while read_tail\n");
         break;
       }
-      *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read == -1 * TIME_OUT)
-      {
-        log_print("Time out while read tail\n");
-        return;
-      }
-      else if (*bytes_read < 0)
-      {
-        log_print("Read block error while read tail\n");
-        return;
-      }
-      else if (*bytes_read == 0)
-      {
-        log_print("Point 4: received 0 bytes\n");
-        return;
-      }
-      *pos = buf;
     }
+
+    *bytes_read = read_block(conn, buf, buf_size);
+    if (*bytes_read < 0)
+    {
+      log_print("Read block error while read tail\n");
+      *bytes_read = 0;
+    }
+    *pos = buf;
   }
   while (*bytes_read);
 
