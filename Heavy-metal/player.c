@@ -55,7 +55,6 @@ static char* page_end =
 "\n"
 "</html>\n";
 
-extern int test_file(char* path);
 extern int showboard(int conn);
 
 int player_show(int conn, const char* params)
@@ -66,6 +65,7 @@ int player_show(int conn, const char* params)
   char path[PATH_MAX];
   ssize_t path_length;
   int found = 0;
+  struct stat st;
 
   char* ppar = strstr(params, "?play=");
   if (ppar == NULL)
@@ -125,8 +125,11 @@ int player_show(int conn, const char* params)
       if (path_length + strlen("video.mp4") + 1 <= PATH_MAX)
       {
         strcpy(path + path_length, "video.mp4");
-        if ( (found = test_file(path)) )
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+        {
+          found = 1;
           strcpy(video_href + SIG_SIZE + ID_SIZE, "f4xx");
+        }
       }
     }
 
@@ -135,8 +138,11 @@ int player_show(int conn, const char* params)
       if (path_length + strlen("video.webm") + 1 <= PATH_MAX)
       {
         strcpy(path + path_length, "video.webm");
-        if ( (found = test_file(path)) )
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+        {
+          found = 1;
           strcpy(video_href + SIG_SIZE + ID_SIZE, "fwxx");
+        }
       }
     }
 
@@ -153,8 +159,11 @@ int player_show(int conn, const char* params)
       if (path_length + strlen("trumb.png") + 1 <= PATH_MAX)
       {
         strcpy(path + path_length, "trumb.png");
-        if ( (found = test_file(path)) )
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+        {
+          found = 1;
           strcpy(trumb_href + SIG_SIZE + ID_SIZE, "ppxx");
+        }
       }
     }
 
@@ -163,8 +172,11 @@ int player_show(int conn, const char* params)
       if (path_length + strlen("trumb.jpg") + 1 <= PATH_MAX)
       {
         strcpy(path + path_length, "trumb.jpg");
-        if ( (found = test_file(path)) )
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+        {
+          found = 1;
           strcpy(trumb_href + SIG_SIZE + ID_SIZE, "pjxx");
+        }
       }
     }
 
@@ -173,8 +185,11 @@ int player_show(int conn, const char* params)
       if (path_length + strlen("trumb.webp") + 1 <= PATH_MAX)
       {
         strcpy(path + path_length, "trumb.webp");
-        if ( (found = test_file(path)) )
+        if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+        {
+          found = 1;
           strcpy(trumb_href + SIG_SIZE + ID_SIZE, "pwxx");
+        }
       }
     }
 

@@ -20,6 +20,7 @@
 
 extern char* showboard_dir;
 extern ssize_t showboard_dir_length;
+extern int vbx_errno;
 extern ssize_t write_block(const int conn, const char* buf, const ssize_t count);
 
 int showboard(int conn);

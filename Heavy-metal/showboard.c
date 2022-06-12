@@ -147,7 +147,6 @@ static char* page_end =
 "</html>\n"
 "\n";
 
-int test_file(char* path);
 int mk_href(char* result, char* path, const ssize_t path_length);
 void mk_trumb(char* result, char* path, const ssize_t path_length);
 void mk_title(char* result, char* path, const ssize_t path_length);
@@ -156,13 +155,10 @@ int mk_boardernote(char** result, const char* href, const char* trumb_file, cons
 
 int showboard(int conn)
 {
-  int rc;
-  ssize_t wcnt;
-
-  rc = strlen(page_begin);
-  wcnt = write_block(conn, page_begin, rc);
-  if (wcnt <= 0)
-    return -1 * wcnt;
+  int rc = strlen(page_begin);
+  rc = write_block(conn, page_begin, rc);
+  if (rc < 0)
+    return vbx_errno;
 
   #ifndef NDEBUG
     log_print("Sended to client:\n");
@@ -173,12 +169,11 @@ int showboard(int conn)
   char path[PATH_MAX];
   DIR *brd_dir, *id_dir;
   struct dirent *brd_entry, *id_entry;
-  char href[SIG_SIZE + ID_SIZE + FLAGS_SIZE + 1];
+  char href[SIG_SIZE + ID_SIZE + 1];
   char trumb[SMALL_BUFFER_SIZE];
   char title[SMALL_BUFFER_SIZE];
   char descr[STANDARD_BUFFER_SIZE];
   char* brdnote = NULL;
-
 
   if ((brd_dir = opendir(showboard_dir)) != NULL) // Open "${VBX_HOME}/showboard/"
   {
@@ -186,11 +181,10 @@ int showboard(int conn)
     while ((brd_entry = readdir(brd_dir)) != NULL)
     {
       entry_length = strlen(brd_entry->d_name);
+      if ( entry_length != SIG_SIZE || strspn(brd_entry->d_name, SIG_CHARS) != SIG_SIZE)  // This is not vbx signature. Just skip such entry
+        continue;
       sig_length = showboard_dir_length + entry_length + 1;
       if (sig_length + 1 > PATH_MAX) // Path overflow. Just skip such entry
-        continue;
-
-      if ( entry_length != SIG_SIZE || strspn(brd_entry->d_name, "0123456789abcdef") != SIG_SIZE)  // This is not vbx signature. Just skip such entry
         continue;
 
       memcpy(path + showboard_dir_length, brd_entry->d_name, SIG_SIZE); // Without NUL
@@ -202,30 +196,35 @@ int showboard(int conn)
         while ((id_entry = readdir(id_dir)) != NULL)
         {
           entry_length = strlen(id_entry->d_name);
+          if ( entry_length != ID_SIZE || strspn(id_entry->d_name, ID_CHARS) != ID_SIZE)  // This is not vbx id. Just skip such entry
+            continue;
           id_length = sig_length + entry_length + 1;
           if (id_length + 1 > PATH_MAX) // Path overflow. Just skip such entry
-            continue;
-
-          if ( entry_length != ID_SIZE || strspn(id_entry->d_name, "0123456789abcdef") != ID_SIZE)  // This is not vbx id. Just skip such entry
             continue;
 
           memcpy(path + sig_length, id_entry->d_name, ID_SIZE); // Without NUL
           path[id_length - 1] = '/';
           path[id_length] = '\0';
 
-          if ( (rc = mk_href(href, path, id_length)) != EXIT_SUCCESS) // Can't find video.mp4 or video.webm or path overflow
+          if ( (rc = mk_href(href, path, id_length)) != NO_ERRORS) // Can't find video.mp4 or video.webm or path overflow
             continue;
           mk_trumb(trumb, path, id_length);
           mk_title(title, path, id_length);
           mk_descr(descr, path, id_length);
 
           rc = mk_boardernote(&brdnote, href, trumb, title, descr);
-          if (rc == EXIT_SUCCESS)
+          if (rc == NO_ERRORS)
           {
             rc = strlen(brdnote);
-            wcnt = write_block(conn, brdnote, rc);
-            if (wcnt <= 0)
-              return -1 * wcnt;
+            rc = write_block(conn, brdnote, rc);
+            if (rc < 0)
+            {
+              closedir(id_dir);
+              closedir(brd_dir);
+              if (brdnote)
+                free(brdnote);
+              return vbx_errno;
+            }
 
             #ifndef NDEBUG
               log_print("%s", brdnote);
@@ -242,24 +241,15 @@ int showboard(int conn)
     free(brdnote);
 
   rc = strlen(page_end);
-  wcnt = write_block(conn, page_end, rc);
-  if (wcnt <= 0)
-    return -1 * wcnt;
+  rc = write_block(conn, page_end, rc);
+  if (rc < 0)
+    return vbx_errno;
 
   #ifndef NDEBUG
     log_print("%s", page_end);
   #endif
 
-  return EXIT_SUCCESS;
-}
-
-int test_file(char* path)
-{
-  struct stat st;
-  int rc = stat(path, &st);
-  if (rc != 0)
-    return 0;
-  return 1;  // File exists
+  return NO_ERRORS;
 }
 
 // In this function we assumes that:
@@ -268,27 +258,30 @@ int test_file(char* path)
 int mk_href(char* result, char* path, const ssize_t path_length)
 {
   int found = 0;
+  struct stat st;
 
   if (path_length + strlen("video.mp4") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "video.mp4");
-    found = test_file(path);
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
   }
 
   if (!found && path_length + strlen("video.webm") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "video.webm");
-    found = test_file(path);
-  } 
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
+  }
 
   if (!found)
-    return EXIT_FAILURE;
+    return NOT_FOUND;
 
   memcpy(result, path + (path_length - 1 - ID_SIZE - 1 - SIG_SIZE), SIG_SIZE);
   memcpy(result + SIG_SIZE, path + (path_length - 1 - ID_SIZE), ID_SIZE);
-  result[SIG_SIZE + ID_SIZE + FLAGS_SIZE] = '\0';
+  result[SIG_SIZE + ID_SIZE] = '\0';
 
-  return EXIT_SUCCESS;
+  return NO_ERRORS;
 }
 
 // In this function we assumes that:
@@ -297,32 +290,39 @@ int mk_href(char* result, char* path, const ssize_t path_length)
 void mk_trumb(char* result, char* path, const ssize_t path_length)
 {
   int found = 0;
+  struct stat st;
   char flags[FLAGS_SIZE] = "ppxx";
 
   if (path_length + strlen("trumb.png") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "trumb.png");
-    found = test_file(path);
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
   }
 
   if (!found && path_length + strlen("trumb.jpg") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "trumb.jpg");
-    if ( (found = test_file(path)) )
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+    {
+      found = 1;
       flags[1] = 'j';
+    }
   }
 
   if (!found && path_length + strlen("trumb.webp") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "trumb.webp");
-    if ( (found = test_file(path)) )
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+    {
+      found = 1;
       flags[1] = 'w';
+    }
   }
 
   if (found)
   {
-    ssize_t pref_length;
-    pref_length = strlen("?pump=");
+    ssize_t pref_length = strlen("?pump=");
     memcpy(result, "?pump=", pref_length);
     memcpy(result + pref_length, path + (path_length - 1 - ID_SIZE - 1 - SIG_SIZE), SIG_SIZE);
     memcpy(result + pref_length + SIG_SIZE, path + (path_length - 1 - ID_SIZE), ID_SIZE);
@@ -340,17 +340,20 @@ void mk_title(char* result, char* path, const ssize_t path_length)
 {
   int iError = NO_ERRORS;
   int found = 0;
+  struct stat st;
 
-  if (path_length + strlen("title.html") + 1 <= PATH_MAX)
-  {
-    strcpy(path + path_length, "title.html");
-    found = test_file(path);
-  }
-
-  if (!found && path_length + strlen("title.txt") + 1 <= PATH_MAX)
+  if (path_length + strlen("title.txt") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "title.txt");
-    found = test_file(path);
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
+  }
+
+  if (!found && path_length + strlen("title.html") + 1 <= PATH_MAX)
+  {
+    strcpy(path + path_length, "title.html");
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
   }
 
   if (found)
@@ -381,17 +384,20 @@ void mk_descr(char* result, char* path, const ssize_t path_length)
 {
   int iError = NO_ERRORS;
   int found = 0;
+  struct stat st;
 
   if (path_length + strlen("descr.html") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "descr.html");
-    found = test_file(path);
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
   }
 
   if (!found && path_length + strlen("descr.txt") + 1 <= PATH_MAX)
   {
     strcpy(path + path_length, "descr.txt");
-    found = test_file(path);
+    if (stat(path, &st) == 0 && S_ISREG(st.st_mode))
+      found = 1;
   }
 
   if (found)
@@ -429,6 +435,6 @@ int mk_boardernote(char** result, const char* href, const char* trumb_file, cons
   if (*result)
     snprintf(*result, sz, note_template, href, trumb_file, title, title, descr);
   else
-    return EXIT_FAILURE;
-  return EXIT_SUCCESS;
+    return MALLOC_FAILED;
+  return NO_ERRORS;
 }
