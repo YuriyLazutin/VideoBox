@@ -863,10 +863,15 @@ void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ss
       break;
     }
 
-    *bytes_read = read_block(conn, buf, buf_size);
-    if (*bytes_read < 0)
+    *bytes_read = read(conn, buf, buf_size);
+    if (*bytes_read == -1)
     {
-      log_print("Read block error while read tail\n");
+      log_print("read(): error while read tail (%s)\n", strerror(errno));
+      *bytes_read = 0;
+    }
+    else if (*bytes_read == 0)
+    {
+      log_print("read(): read 0 bytes\n");
       *bytes_read = 0;
     }
   }
