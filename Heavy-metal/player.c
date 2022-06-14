@@ -53,7 +53,8 @@ static char* page_end =
 "    </table>\n"
 "  </body>\n"
 "\n"
-"</html>\n";
+"</html>\n"
+"\n";
 
 extern int showboard(int conn);
 
