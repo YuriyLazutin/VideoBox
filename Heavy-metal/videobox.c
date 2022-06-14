@@ -306,88 +306,91 @@ int process_connection(int conn)
   #endif
   char* pos = buffer;
   ssize_t bytes_read = 0;
-
-  char* method = NULL;
-  char* request = NULL;
   int iError = NO_ERRORS;
 
-  #ifndef NDEBUG
-    log_print("Received from client\n");
-  #endif
+  do {
+    char* method = NULL;
+    char* request = NULL;
 
-  if (iError == NO_ERRORS)
-    iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
+    #ifndef NDEBUG
+      log_print("Received from client\n");
+    #endif
 
-  if (iError == NO_ERRORS)
-  {
-    method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
-    if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
-      iError = BAD_METHOD;
-    else if (!method && bytes_read == 0) // Some other read error
-      iError = vbx_errno;
-    else if (!method) // \r\n received and method is null
-      iError = BAD_REQUEST;
-    else if (method && !(strcmp(method, "GET") == 0 || strcmp(method, "POST") == 0))
-      iError = BAD_METHOD;
-  }
+    if (iError == NO_ERRORS)
+      iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
 
-  if (iError == NO_ERRORS)
-    iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
-
-  if (iError == NO_ERRORS)
-  {
-    request = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-    if (!request && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
-      iError = BAD_REQUEST;
-    else if (!request && bytes_read == 0) // Some other read error
-      iError = vbx_errno;
-    else if (!request)  // \r\n received and method is null
-      iError = BAD_REQUEST;
-  }
-
-  if (iError == NO_ERRORS)
-  {
-    char* strline = NULL;
-    ssize_t len = 0;
-    int line_cnt = 0;
-
-    do
+    if (iError == NO_ERRORS)
     {
-      strline = read_line(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-      if (!strline && bytes_read == 0)
+      method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
+      if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
+        iError = BAD_METHOD;
+      else if (!method && bytes_read == 0) // Some other read error
         iError = vbx_errno;
-      else if (!strline) // ???
+      else if (!method) // \r\n received and method is null
         iError = BAD_REQUEST;
-
-      if (iError == NO_ERRORS)
-      {
-        line_cnt++;
-        len = strlen(strline);
-        if (len > 0)
-          iError = parse_param_line(strline);
-      }
-
-      if (strline)
-        free(strline);
+      else if (method && !(strcmp(method, "GET") == 0 || strcmp(method, "POST") == 0))
+        iError = BAD_METHOD;
     }
-    while (iError == NO_ERRORS && line_cnt < HEAD_LINE_LIMIT && (len > 0 || line_cnt == 1) );
 
-    if (iError == NO_ERRORS && line_cnt == HEAD_LINE_LIMIT)
-      iError = LINE_LIMIT_EXCEEDED;
+    if (iError == NO_ERRORS)
+      iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
+
+    if (iError == NO_ERRORS)
+    {
+      request = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+      if (!request && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
+        iError = BAD_REQUEST;
+      else if (!request && bytes_read == 0) // Some other read error
+        iError = vbx_errno;
+      else if (!request)  // \r\n received and method is null
+        iError = BAD_REQUEST;
+    }
+
+    if (iError == NO_ERRORS)
+    {
+      char* strline = NULL;
+      ssize_t len = 0;
+      int line_cnt = 0;
+
+      do
+      {
+        strline = read_line(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+        if (!strline && bytes_read == 0)
+          iError = vbx_errno;
+        else if (!strline) // ???
+          iError = BAD_REQUEST;
+
+        if (iError == NO_ERRORS)
+        {
+          line_cnt++;
+          len = strlen(strline);
+          if (len > 0)
+            iError = parse_param_line(strline);
+        }
+
+        if (strline)
+          free(strline);
+      }
+      while (iError == NO_ERRORS && line_cnt < HEAD_LINE_LIMIT && (len > 0 || line_cnt == 1) );
+
+      if (iError == NO_ERRORS && line_cnt == HEAD_LINE_LIMIT)
+        iError = LINE_LIMIT_EXCEEDED;
+    }
+
+    if (iError == NO_ERRORS)
+      iError = process_get(conn, request);
+
+    #ifndef NDEBUG
+    if (iError == NO_ERRORS)
+      read_tail(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
+    #endif
+
+    if (method)
+      free(method);
+    if (request)
+      free(request);
   }
-
-  if (iError == NO_ERRORS)
-    iError = process_get(conn, request);
-
-  #ifndef NDEBUG
-  if (iError == NO_ERRORS)
-    read_tail(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-  #endif
-
-  if (method)
-    free(method);
-  if (request)
-    free(request);
+  while (iError == NO_ERRORS);
 
   switch (iError)
   {
