@@ -590,23 +590,22 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 {
   ssize_t cnt, total_cnt = 0;
 
-  if (*bytes_read == 0)
-  {
-    *pos = buf;
-    *bytes_read = read_block(conn, buf, buf_size);
-    if (*bytes_read < 0)
-    {
-      #ifndef NDEBUG
-        log_print("Read block error while skip_spaces\n");
-      #endif
-      *bytes_read = 0;
-      return vbx_errno;
-    }
-  }
-
-  while (**pos == ' ')
-  {
+  do {
     cnt = 0;
+    if (cnt == *bytes_read)
+    {
+      *pos = buf;
+      *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read < 0)
+      {
+        #ifndef NDEBUG
+          log_print("Read block error while skip spaces\n");
+        #endif
+        *bytes_read = 0;
+        return vbx_errno;
+      }
+    }
+
     while (cnt < *bytes_read && total_cnt + cnt < read_limit && **pos == ' ')
     {
       (*pos)++;
@@ -626,22 +625,10 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       return BAD_REQUEST;
     }
 
-    if (cnt == *bytes_read)
-    {
-      *pos = buf;
-      *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read < 0)
-      {
-        #ifndef NDEBUG
-          log_print("Read block error while skip spaces\n");
-        #endif
-        *bytes_read = 0;
-        return vbx_errno;
-      }
-    }
-    else
-      *bytes_read -= cnt;
+    *bytes_read -= cnt;
   }
+  while (*bytes_read == 0);
+
   return NO_ERRORS;
 }
 
@@ -650,30 +637,24 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   char* result = NULL;
   ssize_t word_len = 0, cnt;
 
-  if (*bytes_read == 0)
-  {
-    *pos = buf;
-    *bytes_read = read_block(conn, buf, buf_size);
-    if (*bytes_read < 0)
-    {
-      #ifndef NDEBUG
-        log_print("Read block error while read_word\n");
-      #endif
-      *bytes_read = 0;
-      if (result)
-        free(result);
-
-      // Just for debug
-      if (result == NULL)
-        fprintf(stderr, "result NULL as expected!\n");
-      // End of Just for debug
-      return result;
-    }
-  }
-
-  while (**pos != ' ' && **pos != '\r' && **pos != '\n')
-  {
+  do {
     cnt = 0;
+    if (cnt == *bytes_read)
+    {
+      *pos = buf;
+      *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read < 0)
+      {
+        #ifndef NDEBUG
+          log_print("Read block error while read word\n");
+        #endif
+        *bytes_read = 0;
+        if (result)
+          free(result);
+        return result;
+      }
+    }
+
     while (cnt < *bytes_read && word_len + cnt < read_limit && **pos != ' ' && **pos != '\r' && **pos != '\n')
     {
       (*pos)++;
@@ -692,10 +673,6 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       vbx_errno = LIMIT_EXCEEDED;
       if (result)
         free(result);
-      // Just for debug
-      if (result == NULL)
-        fprintf(stderr, "result NULL as expected!\n");
-      // End of Just for debug
       return result;
     }
 
@@ -709,29 +686,9 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       return result;
     }
     memcpy(result + word_len - cnt, *pos - cnt, cnt);
-
-    if (cnt == *bytes_read)
-    {
-      *pos = buf;
-      *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read < 0)
-      {
-        #ifndef NDEBUG
-          log_print("Read block error while read word\n");
-        #endif
-        *bytes_read = 0;
-        if (result)
-          free(result);
-      // Just for debug
-      if (result == NULL)
-        fprintf(stderr, "result NULL as expected!\n");
-      // End of Just for debug
-        return result;
-      }
-    }
-    else
-      *bytes_read -= cnt;
+    *bytes_read -= cnt;
   }
+  while (*bytes_read == 0);
 
   if (result)
     *(result + word_len) = '\0';
@@ -743,29 +700,24 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
   char* result = NULL;
   ssize_t total_read = 0, cnt;
 
-  if (*bytes_read == 0)
-  {
-    *pos = buf;
-    *bytes_read = read_block(conn, buf, buf_size);
-    if (*bytes_read < 0)
-    {
-      #ifndef NDEBUG
-        log_print("Read block error while read_line\n");
-      #endif
-      *bytes_read = 0;
-      if (result)
-        free(result);
-      // Just for debug
-      if (result == NULL)
-        fprintf(stderr, "result NULL as expected!\n");
-      // End of Just for debug
-      return result;
-    }
-  }
-
-  while (**pos != '\n')
-  {
+  do {
     cnt = 0;
+    if (cnt == *bytes_read)
+    {
+      *pos = buf;
+      *bytes_read = read_block(conn, buf, buf_size);
+      if (*bytes_read < 0)
+      {
+        #ifndef NDEBUG
+          log_print("Read block error while read_line\n");
+        #endif
+        *bytes_read = 0;
+        if (result)
+          free(result);
+        return result;
+      }
+    }
+
     while (cnt < *bytes_read && total_read + cnt < read_limit && **pos != '\n')
     {
       (*pos)++;
@@ -784,10 +736,6 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       vbx_errno = LIMIT_EXCEEDED;
       if (result)
         free(result);
-      // Just for debug
-      if (result == NULL)
-        fprintf(stderr, "result NULL as expected!\n");
-      // End of Just for debug
       return result;
     }
 
@@ -801,37 +749,12 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       return result;
     }
     memcpy(result + total_read - cnt, *pos - cnt, cnt);
-
-    if (cnt < *bytes_read && **pos == '\n')
-    {
-      (*pos)++;
-      cnt++;
-      *bytes_read -= cnt;
-      break;
-    }
-
-    if (cnt == *bytes_read)
-    {
-      *pos = buf;
-      *bytes_read = read_block(conn, buf, buf_size);
-      if (*bytes_read < 0)
-      {
-        #ifndef NDEBUG
-          log_print("Read block error while read_line\n");
-        #endif
-        *bytes_read = 0;
-        if (result)
-          free(result);
-        // Just for debug
-        if (result == NULL)
-          fprintf(stderr, "result NULL as expected!\n");
-        // End of Just for debug
-        return result;
-      }
-    }
-    else
-      *bytes_read -= cnt;
+    *bytes_read -= cnt;
   }
+  while (*bytes_read == 0);
+
+  (*pos)++;
+  (*bytes_read)--;
 
   if (result)
   {

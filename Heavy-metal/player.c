@@ -85,7 +85,7 @@ int player_show(int conn, const char* params)
     memcpy(sig, ppar, SIG_SIZE);
     *(sig + SIG_SIZE) = '\0';
 
-    if ( strspn(sig, "0123456789abcdef") != SIG_SIZE )
+    if ( strspn(sig, SIG_CHARS) != SIG_SIZE )
       iError = BAD_REQUEST;
   }
 
@@ -94,14 +94,14 @@ int player_show(int conn, const char* params)
     char id[ID_SIZE + 1];
     memcpy(id, ppar + SIG_SIZE, ID_SIZE);
     *(id + ID_SIZE) = '\0';
-    if ( strspn(id, "0123456789abcdef") != ID_SIZE )
+    if ( strspn(id, ID_CHARS) != ID_SIZE )
       iError = BAD_REQUEST;
   }
 
   if (iError == NO_ERRORS)
   {
     memcpy(video_href, ppar, SIG_SIZE + ID_SIZE);
-    memcpy(trumb_href, ppar, SIG_SIZE + SIG_SIZE);
+    memcpy(trumb_href, ppar, SIG_SIZE + ID_SIZE);
 
     path_length = showboard_dir_length + SIG_SIZE + 1 + ID_SIZE + 1;
     if (path_length <= PATH_MAX)
@@ -203,19 +203,34 @@ int player_show(int conn, const char* params)
     char* itm = malloc(length);
     if (itm)
     {
+      int rc;
       snprintf(itm, length, video_template, video_href, trumb_href);
 
-      write(conn, page_begin, strlen(page_begin));
-      write(conn, itm, strlen(itm));
-      write(conn, page_end, strlen(page_end));
-      free(itm);
-
+      length = strlen(page_begin);
+      rc = write_block(conn, page_begin, length);
       #ifndef NDEBUG
+      if (rc > 0)
+      {
         log_print("Sended to client:\n");
         log_print("%s", page_begin);
+      }
+      #endif
+
+      length = strlen(itm);
+      rc = write_block(conn, itm, length);
+      #ifndef NDEBUG
+      if (rc > 0)
         log_print("%s", itm);
+      #endif
+
+      length = strlen(page_end);
+      rc = write_block(conn, page_end, length);
+      #ifndef NDEBUG
+      if (rc > 0)
         log_print("%s", page_end);
       #endif
+
+      free(itm);
     }
     else
       iError = MALLOC_FAILED;
@@ -225,5 +240,5 @@ int player_show(int conn, const char* params)
     return EXIT_SUCCESS;
 
   showboard(conn);
-  return EXIT_FAILURE;
+  return EXIT_SUCCESS;
 }
