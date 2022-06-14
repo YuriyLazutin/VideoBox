@@ -604,7 +604,7 @@ int check_trumb_candidate(struct candidate* c)
     {
       if (c->note)
         free(c->note);
-      c->note = strdup("Looks like trumbnail file iempty!");
+      c->note = strdup("Looks like trumbnail file empty!");
     }
     else if (st.st_size >= 5 * 1024 * 1024)
     {
