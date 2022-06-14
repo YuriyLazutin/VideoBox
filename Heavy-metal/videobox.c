@@ -18,7 +18,6 @@
 #ifndef NDEBUG
   #include "logger.h"
   int connection_id;
-  void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 #endif
 
 // catch SIGCHLD
@@ -379,11 +378,6 @@ int process_connection(int conn)
 
     if (iError == NO_ERRORS)
       iError = process_get(conn, request);
-
-    #ifndef NDEBUG
-    if (iError == NO_ERRORS)
-      read_tail(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-    #endif
 
     if (method)
       free(method);
@@ -831,60 +825,6 @@ int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char*
   *pos = pstr;
   return NO_ERRORS;
 }
-
-#ifndef NDEBUG
-void read_tail(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
-{
-  int flags = fcntl(conn, F_GETFL);
-  if (flags == -1)
-  {
-    log_print("read_tail: Error in call fcntl(conn, F_GETFL): %s\n", strerror(errno));
-    return;
-  }
-
-  int rc = fcntl(conn, F_SETFL, flags | O_NONBLOCK);
-  if (rc == -1)
-  {
-    log_print("read_tail: Error in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
-    return;
-  }
-
-  ssize_t cnt = 0;
-  log_print("Received tail from client:\n");
-  if (*bytes_read > 0)
-    log_print("%s", *pos);
-
-  do
-  {
-    cnt += *bytes_read;
-    if (cnt > read_limit)
-    {
-      log_print("Limit exceeded while read_tail\n");
-      break;
-    }
-
-    *bytes_read = read(conn, buf, buf_size);
-    if (*bytes_read == -1)
-    {
-      log_print("read(): error while read tail (%s)\n", strerror(errno));
-      *bytes_read = 0;
-    }
-    else if (*bytes_read == 0)
-    {
-      log_print("read(): read 0 bytes\n");
-      *bytes_read = 0;
-    }
-  }
-  while (*bytes_read);
-
-  rc = fcntl(conn, F_SETFL, flags);
-  if (rc == -1)
-  {
-    log_print("read_tail: Error 2 in call fcntl(conn, F_SETFL): %s\n", strerror(errno));
-    return;
-  }
-}
-#endif
 
 int parse_param_line(char* str)
 {
