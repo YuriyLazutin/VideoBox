@@ -67,7 +67,7 @@ int pump(int conn, const char* params)
   char* ppar = strstr(params, "?pump=") + strlen("?pump=");
   ssize_t length = strlen(ppar);
 
-  char *flags, *file_name, *mime_type;
+  char *flags = NULL, *file_name = NULL, *mime_type = NULL;
 
   if (length < SIG_SIZE + ID_SIZE + FLAGS_SIZE)
     rc = EXIT_FAILURE;
@@ -119,7 +119,7 @@ int pump(int conn, const char* params)
       rc = EXIT_FAILURE;
   }
 
-  char *sig, *id;
+  char *sig = NULL, *id = NULL;
   if (rc == EXIT_SUCCESS)
   {
     sig = strndup(ppar, SIG_SIZE);
@@ -128,7 +128,7 @@ int pump(int conn, const char* params)
       rc = EXIT_FAILURE;
   }
 
-  char *file_path;
+  char *file_path = NULL;
   if (rc == EXIT_SUCCESS)
   {
     length = strlen(showboard_dir) + SIG_SIZE + 1 + ID_SIZE + 1 + strlen(file_name) + 1;
@@ -196,16 +196,6 @@ int pump(int conn, const char* params)
           log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
           log_print("%s", buf);
         }
-        else if (bytes_wrote == 0)
-          log_print("pump: Tried to send Ok response but 0 bytes sended.\n");
-        else if (bytes_wrote == -1 * TIME_OUT)
-          log_print("pump: Tried to send Ok response but TIME_OUT occursed.\n");
-        else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-          log_print("pump: Tried to send Ok response but CONNECTION_CLOSED.\n");
-        else if (bytes_wrote == -1 * POLL_ERROR)
-          log_print("pump: Tried to send Ok response but POLL_ERROR occursed.\n");
-        else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-          log_print("pump: Tried to send Ok response but WRITE_BLOCK_ERROR occursed.\n");
       #endif
     }
 
@@ -303,16 +293,6 @@ int pump(int conn, const char* params)
           log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
           log_print("%s", buf);
         }
-        else if (bytes_wrote == 0)
-          log_print("pump: Tried to send 206 Partial Content response but 0 bytes sended.\n");
-        else if (bytes_wrote == -1 * TIME_OUT)
-          log_print("pump: Tried to send 206 Partial Content response but TIME_OUT occursed.\n");
-        else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-          log_print("pump: Tried to send 206 Partial Content response but CONNECTION_CLOSED.\n");
-        else if (bytes_wrote == -1 * POLL_ERROR)
-          log_print("pump: Tried to send 206 Partial Content response but POLL_ERROR occursed.\n");
-        else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-          log_print("pump: Tried to send 206 Partial Content response but WRITE_BLOCK_ERROR occursed.\n");
       #endif
 
     }
@@ -358,16 +338,6 @@ int pump(int conn, const char* params)
                 log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
                 log_print("%s", buf);
               }
-              else if (bytes_wrote == 0)
-                log_print("pump: Tried to send multipart part but 0 bytes sended.\n");
-              else if (bytes_wrote == -1 * TIME_OUT)
-                log_print("pump: Tried to send multipart part but TIME_OUT occursed.\n");
-              else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-                log_print("pump: Tried to send multipart part but CONNECTION_CLOSED.\n");
-              else if (bytes_wrote == -1 * POLL_ERROR)
-                log_print("pump: Tried to send multipart part but POLL_ERROR occursed.\n");
-              else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-                log_print("pump: Tried to send multipart part but WRITE_BLOCK_ERROR occursed.\n");
             #endif
           }
 
@@ -404,23 +374,13 @@ int pump(int conn, const char* params)
               log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
               log_print("%s", multipart_end);
             }
-            else if (bytes_wrote == 0)
-              log_print("pump: Tried to send multipart_end but 0 bytes sended.\n");
-            else if (bytes_wrote == -1 * TIME_OUT)
-              log_print("pump: Tried to send multipart_end but TIME_OUT occursed.\n");
-            else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-              log_print("pump: Tried to send multipart_end but CONNECTION_CLOSED.\n");
-            else if (bytes_wrote == -1 * POLL_ERROR)
-              log_print("pump: Tried to send multipart_end but POLL_ERROR occursed.\n");
-            else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-              log_print("pump: Tried to send multipart_end but WRITE_BLOCK_ERROR occursed.\n");
           #endif
         }
       }
     }
   }
 
-  close(read_fd);
+  close(read_fd); // ???
   if (file_path)
     free(file_path);
   if (id)
@@ -453,11 +413,11 @@ void send_not_found(const int conn)
     " </body>\n"
     "</html>\n";
 
-  int len = strlen(not_found_response);
-  ssize_t bytes_wrote = write_block(conn, not_found_response, len);
+  ssize_t length = strlen(not_found_response);
+  ssize_t bytes_wrote = write_block(conn, not_found_response, length);
 
   #ifndef NDEBUG
-    if (bytes_wrote == len)
+    if (bytes_wrote == length)
     {
       log_print("send_not_found: Sended to client:\n");
       log_print("%s", not_found_response);
@@ -467,16 +427,6 @@ void send_not_found(const int conn)
       log_print("send_not_found: Not found response partially sended to client (%ld bytes sended):\n", bytes_wrote);
       log_print("%s", not_found_response);
     }
-    else if (bytes_wrote == 0)
-      log_print("send_not_found: Tried to send Not found response but 0 bytes sended.\n");
-    else if (bytes_wrote == -1 * TIME_OUT)
-      log_print("send_not_found: Tried to send Not found response but TIME_OUT occursed.\n");
-    else if (bytes_wrote == -1 * CONNECTION_CLOSED)
-      log_print("send_not_found: Tried to send Not found response but CONNECTION_CLOSED.\n");
-    else if (bytes_wrote == -1 * POLL_ERROR)
-      log_print("send_not_found: Tried to send Not found response but POLL_ERROR occursed.\n");
-    else if (bytes_wrote == -1 * WRITE_BLOCK_ERROR)
-      log_print("send_not_found: Tried to send Not found response but WRITE_BLOCK_ERROR occursed.\n");
   #endif
 }
 
