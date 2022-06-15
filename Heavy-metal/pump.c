@@ -337,6 +337,15 @@ int pump(int conn, const char* params)
           else if (bytes_sent != send_cnt)
             log_print("pump: Warning! sendfile sended less bytes then requested (%ld < %ld)\n", bytes_sent, send_cnt);
           #endif
+
+          if (rc == NO_ERRORS)
+          {
+            bytes_sent = write_block(conn, "\n\n", 2);
+            #ifndef NDEBUG
+              if (bytes_sent == 2)
+               log_print("\n\n");
+            #endif
+          }
         }
         else // send file as few blocks
         {
