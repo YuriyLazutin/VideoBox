@@ -318,7 +318,7 @@ int process_connection(int conn)
     if (iError == NO_ERRORS)
       iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
 
-    if (iError == NO_ERRORS)
+    while (iError == NO_ERRORS && !method)
     {
       method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
       if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
@@ -326,7 +326,13 @@ int process_connection(int conn)
       else if (!method && bytes_read == 0) // Some other read error
         iError = vbx_errno;
       else if (!method) // \r\n received and method is null
-        iError = BAD_REQUEST;
+      {
+        while (bytes_read && (*pos == '\r' || *pos == '\n'))
+        {
+          bytes_read--;
+          pos++;
+        }
+      }
       else if (method && !(strcmp(method, "GET") == 0 || strcmp(method, "POST") == 0))
         iError = BAD_METHOD;
     }
@@ -341,7 +347,7 @@ int process_connection(int conn)
         iError = BAD_REQUEST;
       else if (!request && bytes_read == 0) // Some other read error
         iError = vbx_errno;
-      else if (!request)  // \r\n received and method is null
+      else if (!request)  // \r\n received and request is null
         iError = BAD_REQUEST;
     }
 
@@ -438,7 +444,11 @@ int process_get(int conn, const char* page)
   if ((v = strstr(page, "?play=")))
     rc = player_show(conn, page);
   else if ((v = strstr(page, "?pump=")))
+  {
     rc = pump(conn, page);
+    if (rc != NO_ERRORS) // Pump inform us about errors, but it processed it by itself, so we should ignore them
+      rc = NO_ERRORS;
+  }
   else
     rc = showboard(conn);
 
@@ -673,16 +683,19 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       return result;
     }
 
-    result = realloc(result, word_len + 1);
-    if (!result)
+    if (word_len > 0)
     {
-      #ifndef NDEBUG
-        log_print("Realloc filed while read_word\n");
-      #endif
-      vbx_errno = MALLOC_FAILED;
-      return result;
+      result = realloc(result, word_len + 1);
+      if (!result)
+      {
+        #ifndef NDEBUG
+          log_print("Realloc filed while read_word\n");
+        #endif
+        vbx_errno = MALLOC_FAILED;
+        return result;
+      }
+      memcpy(result + word_len - cnt, *pos - cnt, cnt);
     }
-    memcpy(result + word_len - cnt, *pos - cnt, cnt);
     *bytes_read -= cnt;
   }
   while (*bytes_read == 0);
@@ -955,7 +968,8 @@ void send_request_timeout(const int conn)
     "  <h1>Request Timeout</h1>\n"
     "  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>\n"
     " </body>\n"
-    "</html>\n";
+    "</html>\n"
+    "\n";
 
   ssize_t lenght = strlen(timeout_response);
   write_block(conn, timeout_response, lenght);

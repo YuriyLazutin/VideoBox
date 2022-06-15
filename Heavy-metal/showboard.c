@@ -125,7 +125,7 @@ static char* page_begin =
 "<img src=\"https://yuriylazutin.github.io/lazutin.info/videobox/pics/logo.png\" class=\"logo\"></img>\n"
 "<div class=\"cont2\">\n"
 "<H1>Videobox</H1>\n"
-"<font class=\"rectext\">********************</font>\n"
+"<font class=\"rectext\"> <!-- Some text can be here --> </font>\n"
 "</div>\n"
 "</div>\n"
 "</header>\n"
@@ -136,10 +136,10 @@ static char* note_template =
 " <a href=\"?play=%s\">\n"
 "   <img class=\"trumb\" src=\"%s\" title=\"%s\"></img>\n"
 "   <font class=\"viddesc\"><b>%s</b><br>%s</font>\n"
-" </a>\n";
+" </a>\n"
+"</div>\n";
 
 static char* page_end =
-"</div>\n"
 "<footer>\n"
 "<br>\n"
 "</footer>\n"

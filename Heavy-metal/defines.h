@@ -47,6 +47,7 @@
 #define   RENAME_FILE_FAILED    24
 #define   LIMIT_EXCEEDED        25
 #define   LINE_LIMIT_EXCEEDED   26
+#define   BUFFER_OVERFLOW       27
 #define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H
