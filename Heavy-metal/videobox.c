@@ -30,7 +30,6 @@ ssize_t write_block(const int conn, const char* buf, const ssize_t count);
 int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
-int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit);
 int parse_param_line(char* str);
 char* find_str_ncase(const char* buf, const char* str);
 void send_bad_request(const int conn);
@@ -773,70 +772,6 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     *(result + total_read) = '\0';
   }
   return result;
-}
-
-int read_str(const int conn, char* str, char* buf, const ssize_t buf_size, char** pos, ssize_t* bytes_read, const ssize_t read_limit)
-{
-  if (*bytes_read == 0)
-  {
-    *pos = buf;
-    *bytes_read = read_block(conn, buf, buf_size);
-    if (*bytes_read < 0)
-    {
-      #ifndef NDEBUG
-        log_print("Read block error while read_str\n");
-      #endif
-      *bytes_read = 0;
-      return vbx_errno;
-    }
-  }
-
-  ssize_t total_read = *bytes_read;
-  int i = 0, n = strlen(str), m;
-  char* pstr;
-
-  if (n > buf_size - 1)
-  {
-    vbx_errno = BAD_REQUEST;
-    return BAD_REQUEST;
-  }
-
-  while ((pstr = strstr(*pos, str)) == NULL)
-  {
-    if (total_read > read_limit)
-    {
-      #ifndef NDEBUG
-        log_print("Limit exceeded while reading string\n");
-      #endif
-      *pos = buf;
-      *bytes_read = 0;
-      vbx_errno = LIMIT_EXCEEDED;
-      return BAD_REQUEST;
-    }
-
-    m = (*bytes_read < n) ? *bytes_read : n;
-
-    for (i = 0; i < m; i++)
-      *(buf + i) = *(*pos + *bytes_read - m + i);
-    *pos = buf + i;
-
-    *bytes_read = read_block(conn, *pos, buf_size - i);
-    if (*bytes_read < 0)
-    {
-      #ifndef NDEBUG
-        log_print("Read block error while read_str\n");
-      #endif
-      *bytes_read = 0;
-      return vbx_errno;
-    }
-    *pos = buf;
-    total_read += *bytes_read;
-    *bytes_read += m;
-  }
-
-  *bytes_read = *bytes_read - (pstr - *pos);
-  *pos = pstr;
-  return NO_ERRORS;
 }
 
 int parse_param_line(char* str)
