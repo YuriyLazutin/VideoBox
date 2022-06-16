@@ -9,8 +9,10 @@
 #define   TOTAL_REQ_TIME_LIMIT            30000 // 30 sec
 #define   READ_BLOCK_TIME_LIMIT           5000 // 5 sec
 #define   WRITE_BLOCK_TIME_LIMIT          5000 // 5 sec
+#define   HEAD_LINE_LIMIT                 100
 #define   MAX_CLOSE_DESCRIPTOR_ATTEMPTS   5
 #define   MAX_CREATE_ID_DIR_ATTEMPTS      1000
+#define   SIG_CHARS                       "0123456789abcdef"
 #define   ID_CHARS                        "0123456789abcdefghijklmnopqrstuvwxy"
 
 #define   TINY_BUFFER_SIZE        8
@@ -43,6 +45,10 @@
 #define   DUPLICATE_FOUND       22
 #define   NOT_FILE              23
 #define   RENAME_FILE_FAILED    24
+#define   LIMIT_EXCEEDED        25
+#define   LINE_LIMIT_EXCEEDED   26
+#define   BUFFER_OVERFLOW       27
+#define   INVALID_RANGE         28
 #define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H
