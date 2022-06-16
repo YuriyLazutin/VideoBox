@@ -48,6 +48,7 @@
 #define   LIMIT_EXCEEDED        25
 #define   LINE_LIMIT_EXCEEDED   26
 #define   BUFFER_OVERFLOW       27
+#define   INVALID_RANGE         28
 #define   UNKNOWN_ERROR       1000
 
 #endif // DEFINES_H

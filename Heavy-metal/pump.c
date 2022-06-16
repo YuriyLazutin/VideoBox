@@ -48,8 +48,7 @@ static char* partial_head_template =
 static char* multipart_head =
 "HTTP/1.1 206 Partial Content\n"
 "Content-Type: multipart/byteranges; boundary=X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X\n"
-"Content-Length: %lu\n"
-"\n";
+"Content-Length: %lu\n";
 
 static char* multipart_part_head_template =
 "\n--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X\n"
@@ -66,11 +65,10 @@ int pump(int conn, const char* params)
 
   char* ppar = strstr(params, "?pump=") + strlen("?pump=");
   ssize_t length = strlen(ppar);
-
-  char *flags = NULL, *file_name = NULL, *mime_type = NULL;
-
   if (length < SIG_SIZE + ID_SIZE + FLAGS_SIZE)
     rc = BAD_REQUEST;
+
+  char *flags = NULL, *file_name = NULL, *mime_type = NULL;
 
   if (rc == NO_ERRORS)
   {
@@ -271,8 +269,7 @@ int pump(int conn, const char* params)
           #ifndef NDEBUG
             log_print("pump: Detected invalid range in request (start_pos = %ld, end_pos = %ld, file_size = %lu)\n", pb->start, pb->end, file_info.st_size);
           #endif
-          send_range_not_satisfiable(conn, file_info.st_size);
-          rc = BAD_REQUEST;
+          rc = INVALID_RANGE;
         }
 
         // Collapse ranges here if needed
@@ -432,7 +429,9 @@ int pump(int conn, const char* params)
   if (flags)
     free(flags);
 
-  if (rc != NO_ERRORS)
+  if (rc == INVALID_RANGE)
+    send_range_not_satisfiable(conn, file_info.st_size);
+  else if (rc != NO_ERRORS)
     send_not_found(conn);
 
   return rc;
@@ -496,7 +495,6 @@ void send_range_not_satisfiable(const int conn, long size)
     return;
   }
 
-  len = strlen(buf);
   ssize_t bytes_wrote = write_block(conn, buf, len);
 
   #ifndef NDEBUG
