@@ -323,7 +323,7 @@ int process_connection(int conn)
       method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
       if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
         iError = BAD_METHOD;
-      else if (!method && bytes_read == 0) // Some other read error
+      else if (!method && bytes_read == 0) // Some other read error (f.e. TIME_OUT)
         iError = vbx_errno;
       else if (!method) // \r\n received and method is null
       {
@@ -340,15 +340,21 @@ int process_connection(int conn)
     if (iError == NO_ERRORS)
       iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
 
-    if (iError == NO_ERRORS)
+    while (iError == NO_ERRORS && !request)
     {
       request = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
       if (!request && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
         iError = BAD_REQUEST;
-      else if (!request && bytes_read == 0) // Some other read error
+      else if (!request && bytes_read == 0) // Some other read error (f.e. TIME_OUT)
         iError = vbx_errno;
       else if (!request)  // \r\n received and request is null
-        iError = BAD_REQUEST;
+      {
+        while (bytes_read && (*pos == '\r' || *pos == '\n'))
+        {
+          bytes_read--;
+          pos++;
+        }
+      }
     }
 
     if (iError == NO_ERRORS)
@@ -624,7 +630,7 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt < *bytes_read && total_cnt == read_limit && **pos == ' ')
     {
       #ifndef NDEBUG
-      log_print("Limit exceeded while skip spaces\n");
+      log_print("\nLimit exceeded while skip spaces\n");
       #endif
       *pos = buf;
       *bytes_read = 0;
@@ -658,7 +664,7 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
         *bytes_read = 0;
         if (result)
           free(result);
-        return result;
+        return NULL;
       }
     }
 
@@ -673,14 +679,14 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt < *bytes_read && word_len == read_limit && **pos != ' ' && **pos != '\r' && **pos != '\n')
     {
       #ifndef NDEBUG
-        log_print("Limit exceeded while read_word\n");
+        log_print("\nLimit exceeded while read_word\n");
       #endif
       *pos = buf;
       *bytes_read = 0;
       vbx_errno = LIMIT_EXCEEDED;
       if (result)
         free(result);
-      return result;
+      return NULL;
     }
 
     if (word_len > 0)
@@ -689,7 +695,7 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       if (!result)
       {
         #ifndef NDEBUG
-          log_print("Realloc filed while read_word\n");
+          log_print("\nRealloc filed while read_word\n");
         #endif
         vbx_errno = MALLOC_FAILED;
         return result;
@@ -724,7 +730,7 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
         *bytes_read = 0;
         if (result)
           free(result);
-        return result;
+        return NULL;
       }
     }
 
@@ -739,21 +745,21 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     if (cnt < *bytes_read && total_read == read_limit && **pos != '\n')
     {
       #ifndef NDEBUG
-      log_print("Limit exceeded while read_line\n");
+      log_print("\nLimit exceeded while read_line\n");
       #endif
       *pos = buf;
       *bytes_read = 0;
       vbx_errno = LIMIT_EXCEEDED;
       if (result)
         free(result);
-      return result;
+      return NULL;
     }
 
     result = realloc(result, total_read + 1);
     if (!result)
     {
       #ifndef NDEBUG
-        log_print("Realloc filed while read_line\n");
+        log_print("\nRealloc filed while read_line\n");
       #endif
       vbx_errno = MALLOC_FAILED;
       return result;
