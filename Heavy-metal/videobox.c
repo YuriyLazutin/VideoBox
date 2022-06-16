@@ -931,7 +931,7 @@ void send_bad_method(const int conn)
   ssize_t lenght = strlen(bad_method_response);
   write_block(conn, bad_method_response, lenght);
   #ifndef NDEBUG
-    log_print("Sended to client:\n");
+    log_print("\nSended to client:\n");
     log_print("%s", bad_method_response);
   #endif
 }
