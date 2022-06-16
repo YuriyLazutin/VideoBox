@@ -297,7 +297,8 @@ int close_descriptor(int d)
 int process_connection(int conn)
 {
   #ifndef NDEBUG
-  char buffer[TINY_BUFFER_SIZE];
+  char buffer[2];
+  //char buffer[TINY_BUFFER_SIZE];
   //char buffer[SMALL_BUFFER_SIZE];
   #else
   char buffer[STANDARD_BUFFER_SIZE];
