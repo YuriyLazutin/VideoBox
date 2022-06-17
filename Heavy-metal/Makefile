@@ -1,10 +1,7 @@
 .PHONY: all clean
 
-videobox: videobox.o player.o pump.o showboard.o logger.o
-	gcc $(CFLAGS) -o videobox videobox.o player.o pump.o showboard.o logger.o
-
-logger.o: logger.c logger.h defines.h
-	gcc $(CFLAGS) -c logger.c
+videobox: videobox.o player.o pump.o showboard.o
+	gcc $(CFLAGS) -o videobox videobox.o player.o pump.o showboard.o
 
 player.o: player.c player.h defines.h
 	gcc $(CFLAGS) -c player.c
