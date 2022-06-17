@@ -226,14 +226,6 @@ int main()
     }
   } while (rc == EXIT_SUCCESS);
 
-  struct block_range *pbr = blocks;
-  while (blocks)
-  {
-    pbr = blocks->pNext;
-    free(blocks);
-    blocks = pbr;
-  }
-
   if (showboard_dir)
     free(showboard_dir);
 
@@ -307,7 +299,8 @@ int process_connection(int conn)
   ssize_t bytes_read = 0;
   int iError = NO_ERRORS;
 
-  do {
+  do
+  {
     char* method = NULL;
     char* request = NULL;
 
@@ -395,6 +388,15 @@ int process_connection(int conn)
       free(method);
     if (request)
       free(request);
+
+    struct block_range *pbr = blocks;
+    while (blocks)
+    {
+      pbr = blocks->pNext;
+      free(blocks);
+      blocks = pbr;
+    }
+
   }
   while (iError == NO_ERRORS);
 
