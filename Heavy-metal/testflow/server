@@ -1,0 +1,484 @@
+# case № 1 (status=Ok,Ok,Ok,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+^]
+telnet> quit
+Connection closed.
+
+# case № 2 (status=Ok,OK,Ok,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET^]
+telnet> quit
+Connection closed.
+
+# case № 3 (status=Ok,Failed,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+\r\n
+\r\n
+HTTP/1.1 408 Request Timeout
+...
+
+Connection closed by foreign host.
+
+# case № 4 (status=Ok,Ok,Ok,?,?) ## Time-out currently 5 sec.
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+
+wait 30+ seconds
+
+HTTP/1.1 408 Request Timeout
+...
+Connection closed by foreign host.
+
+# case № 5 (status=Ok,Ok,Ok,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+get
+^]
+telnet> quit
+Connection closed.
+
+# case № 6 (status=Ok,Failed,Ok,Failed,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GETTT
+^]
+telnet> quit
+Connection closed.
+
+# case № 7 (status=Ok,Ok,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET
+^]
+telnet> quit
+Connection closed.
+
+# case № 8 (status=Ok,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+POST
+
+HTTP/1.1 408 Request Timeout
+...
+
+Connection closed by foreign host.
+
+# case № 9 (status=Failed,Failed,Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET X
+^]
+telnet> quit
+Connection closed.
+
+# case № 10 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET X\r\n
+\r\n
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 11 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET  X   HTTP/1.1\r\n
+\r\n
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 12 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET XYZ HTTP/1.1
+Range: bytes=0-
+
+This is tail test
+String2 of tail
+\r\n
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 13 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /
+Range: bytes=0-100
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 14 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /
+Range: bytes=-100, 50-150, 500
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 15 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?play=aaaaaaaaaaaaaaaa
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... showboard contents ...
+Connection closed by foreign host.
+
+# case № 16 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?play=4032af8d61035123906e58e067140cc5qphn
+
+
+HTTP/1.0 200 OK
+Content-type: text/html
+
+... player contents ...
+Connection closed by foreign host.
+
+# case № 17 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?play=4032af8d61035123906e58e067140cc5qphn
+Range: bytes=5
+
+# case № 18 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=aaaaaaaaaaaaaaaa
+
+
+# case № 19 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+
+GET /
+
+# case № 20 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+Range: bytes=5
+
+
+# case № 21 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+Range: bytes=-5
+
+
+# case № 22 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+Range: bytes=2-5, -3, 5-
+
+HTTP/1.1 206 Partial Content
+Content-Type: multipart/byteranges; boundary=X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X
+Content-Length: 16
+
+
+--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X
+Content-Type: video/mp4
+Content-Range: bytes 2-5/16
+
+2345
+--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X
+Content-Type: video/mp4
+Content-Range: bytes 13-15/16
+
+def
+--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X
+Content-Type: video/mp4
+Content-Range: bytes 5-15/16
+
+56789abcdef
+--X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X0X--
+HTTP/1.1 408 Request Timeout
+Content-type: text/html
+
+<html>
+ <body>
+  <h1>Request Timeout</h1>
+  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>
+ </body>
+</html>
+
+Connection closed by foreign host.
+
+# case № 23 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+Range: bytes=5-500
+
+
+# case № 24 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx
+Range: bytes=500
+
+HTTP/1.1 416 Range Not Satisfiable
+Content-Range: bytes */16
+
+HTTP/1.1 408 Request Timeout
+Content-type: text/html
+
+<html>
+ <body>
+  <h1>Request Timeout</h1>
+  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>
+ </body>
+</html>
+
+Connection closed by foreign host.
+
+# case № 25 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx HTTP/1.1
+Host: localhost:5810
+User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0
+Accept: video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5
+Accept-Language: en-US,en;q=0.5
+Range: bytes=0-
+DNT: 1
+Connection: keep-alive
+Referer: http://localhost:5810/?play=4032af8d61035123906e58e067140cc5qphn
+Sec-Fetch-Dest: video
+Sec-Fetch-Mode: no-cors
+Sec-Fetch-Site: same-origin
+
+HTTP/1.1 200 OK
+Accept-Ranges: bytes
+Content-Length: 16
+Content-Type: video/mp4
+
+0123456789abcdef
+
+HTTP/1.1 408 Request Timeout
+Content-type: text/html
+
+<html>
+ <body>
+  <h1>Request Timeout</h1>
+  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>
+ </body>
+</html>
+
+Connection closed by foreign host.
+
+# case № 26 (status=Ok,Ok)
+
+telnet localhost 5810
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+GET /?pump=4032af8d61035123906e58e067140cc5qphnf4xx HTTP/1.1
+Host: localhost:5810
+User-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0
+Accept: video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5
+Accept-Language: en-US,en;q=0.5
+Range: bytes=9-
+DNT: 1
+Connection: keep-alive
+Referer: http://localhost:5810/?play=4032af8d61035123906e58e067140cc5qphn
+Sec-Fetch-Dest: video
+Sec-Fetch-Mode: no-cors
+Sec-Fetch-Site: same-origin
+
+HTTP/1.1 206 Partial Content
+Content-Type: video/mp4
+Content-Range: bytes 9-15/16
+Content-Length: 7
+
+9abcdef
+
+HTTP/1.1 408 Request Timeout
+Content-type: text/html
+
+<html>
+ <body>
+  <h1>Request Timeout</h1>
+  <p>Your requests are coming in too slowly. The server is forced to reject connection.</p>
+ </body>
+</html>
+
+Connection closed by foreign host.
+
+# case № 27 (status= )
+# case № 28 (status= )
+# case № 29 (status= )
+# case № 30 (status= )
+# case № 31 (status= )
+# case № 32 (status= )
+# case № 33 (status= )
+# case № 34 (status= )
+# case № 35 (status= )
+# case № 36 (status= )
+# case № 37 (status= )
+# case № 38 (status= )
+# case № 39 (status= )
+# case № 40 (status= )
+# case № 41 (status= )
+# case № 42 (status= )
+# case № 43 (status= )
+# case № 44 (status= )
+# case № 45 (status= )
+# case № 46 (status= )
+# case № 47 (status= )
+# case № 48 (status= )
+# case № 49 (status= )
+# case № 50 (status= )
+# case № 51 (status= )
+# case № 52 (status= )
+# case № 53 (status= )
+# case № 54 (status= )
+# case № 55 (status= )
+# case № 56 (status= )
+# case № 57 (status= )
+# case № 58 (status= )
+# case № 59 (status= )
+# case № 60 (status= )
+# case № 61 (status= )
+# case № 62 (status= )
+# case № 63 (status= )
+# case № 64 (status= )
+# case № 65 (status= )
+# case № 66 (status= )
+# case № 67 (status= )
+# case № 68 (status= )
+# case № 69 (status= )
+# case № 70 (status= )
+# case № 71 (status= )
+# case № 72 (status= )
+# case № 73 (status= )
+# case № 74 (status= )
+# case № 75 (status= )
+# case № 76 (status= )
+# case № 77 (status= )
+# case № 78 (status= )
+# case № 79 (status= )
+# case № 80 (status= )
+# case № 81 (status= )
+# case № 82 (status= )
+# case № 83 (status= )
+# case № 84 (status= )
+# case № 85 (status= )
+# case № 86 (status= )
+# case № 87 (status= )
+# case № 88 (status= )
+# case № 89 (status= )
+# case № 90 (status= )
+# case № 91 (status= )
+# case № 92 (status= )
+# case № 93 (status= )
+# case № 94 (status= )
+# case № 95 (status= )
+# case № 96 (status= )
+# case № 97 (status= )
+# case № 98 (status= )
+# case № 99 (status= )
+# case № 100 (status= )
