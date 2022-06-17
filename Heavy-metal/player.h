@@ -6,11 +6,8 @@
 #include <unistd.h>
 #include <string.h> // strlen
 #include <linux/limits.h> // PATH_MAX
+#include <sys/stat.h>
 #include "defines.h"
-
-#ifndef NDEBUG
-  #include "logger.h"
-#endif
 
 extern char* showboard_dir;
 extern ssize_t showboard_dir_length;

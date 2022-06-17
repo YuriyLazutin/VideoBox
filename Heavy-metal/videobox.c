@@ -5,9 +5,7 @@
 #include <string.h> // strcpy, strerror
 #include <arpa/inet.h>
 #include <sys/wait.h>
-//#include <sys/socket.h>
 #include <signal.h>
-//#include <linux/limits.h> // PATH_MAX
 #include <poll.h>
 #include "defines.h"
 #include "common.h"
@@ -15,13 +13,7 @@
 #include "pump.h"
 #include "showboard.h"
 
-#ifndef NDEBUG
-  #include "logger.h"
-  int connection_id;
-#endif
-
-// catch SIGCHLD
-void clean_up_child_process(int);
+void clean_up_child_process();
 int close_descriptor(int d);
 int process_connection(int conn);
 int process_get(int conn, const char* page);
@@ -60,15 +52,6 @@ int main()
   if (!showboard_dir)
     return EXIT_FAILURE;
 
-  //free(showboard_dir);  // Just for debug
-  //showboard_dir = strdup("/home/ylazutin/showboard/"); // Just for debug
-  //showboard_dir_length = strlen(showboard_dir); // Just for debug
-
-  #ifndef NDEBUG
-    server_log_init();
-    connection_id = 0;
-  #endif
-
   struct sockaddr_in server_address;
   struct sockaddr_in remote_address;
   socklen_t address_length = sizeof(server_address);
@@ -79,54 +62,35 @@ int main()
   local_address.s_addr = INADDR_ANY;
   server_address.sin_addr = local_address;
 
-  // Set up SIGCHLD handler
   struct sigaction sigchld_action;
   memset(&sigchld_action, 0, sizeof(sigchld_action));
   sigchld_action.sa_handler = &clean_up_child_process;
   sigaction(SIGCHLD, &sigchld_action, NULL);
 
-  // Server creation
   int server_socket = socket(PF_INET, SOCK_STREAM, 0);
   if (server_socket == -1)
   {
-    #ifndef NDEBUG
-      log_print("Error in function \"socket\": %s\n", strerror(errno));
-    #else
     fprintf(stderr, "Error in function \"socket\": %s\n", strerror(errno));
-    #endif
     return EXIT_FAILURE;
   }
 
   const int on = 1;
   int rc = setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-  #ifndef NDEBUG
-  if (rc == -1)
-    log_print("Error in function \"setsockopt\": %s\n", strerror(errno));
-  #endif
 
   rc = bind(server_socket, (const struct sockaddr *)&server_address, sizeof(server_address));
   if (rc != 0)
   {
-    #ifndef NDEBUG
-      log_print("Error in function \"bind\": %s\n", strerror(errno));
-    #else
     fprintf(stderr, "Error in function \"bind\": %s\n", strerror(errno));
-    #endif
     return EXIT_FAILURE;
   }
 
   rc = listen(server_socket, SERVER_LISTEN_BACKLOG);
   if (rc != 0)
   {
-    #ifndef NDEBUG
-      log_print("Error in function \"listen\": %s\n", strerror(errno));
-    #else
     fprintf(stderr, "Error in function \"listen\": %s\n", strerror(errno));
-    #endif
     return EXIT_FAILURE;
   }
 
-  // Process connections
   do
   {
     address_length = sizeof(remote_address);
@@ -136,91 +100,42 @@ int main()
     {
       switch (errno)
       {
-        case EINTR:               // The system call was interrupted by a signal.
+        case EINTR:
           continue;
-
-        // Critical errors (shutdown server)
-        case EBADF:             // invalid descriptor. server_socket is not an open file descriptor.
-        case EINVAL:            // Socket is not listening for connections, or address_length is invalid
-        case ENOTSOCK:          // The file descriptor server_socket does not refer to a socket.
-        case EOPNOTSUPP:        // The referenced socket is not of type SOCK_STREAM.
-        /*
-          // In addition, network errors for the new socket and as defined for the protocol may be returned.
-          case ERESTART:          // Interrupted system call should be restarted (The value ERESTARTSYS may be seen during a trace).
-          case ESOCKTNOSUPPORT:   // Socket type not supported
-          case EPROTONOSUPPORT:   // Protocol not supported
-        */
-          #ifndef NDEBUG
-            log_print("Critical error in function \"accept\": %s\n", strerror(errno));
-          #else
-            fprintf(stderr, "Critical error in function \"accept\": %s\n", strerror(errno));
-          #endif
+        case EBADF:
+        case EINVAL:
+        case ENOTSOCK:
+        case EOPNOTSUPP:
+          fprintf(stderr, "Critical error in function \"accept\": %s\n", strerror(errno));
           rc = EXIT_FAILURE;
           continue;
-
-        default:  // Not critical errors (Repeat attempt after pause)
-        /*
-          EAGAIN, EWOULDBLOCK:   The socket is marked nonblocking and no connections are present to be accepted.
-          ECONNABORTED:          A connection has been aborted.
-          EFAULT:                The remote_address argument is not in a writable part of the user address space.
-          EMFILE:                The per-process limit on the number of open file descriptors has been reached.
-          ENFILE:                The system-wide limit on the total number of open files has been reached.
-          ENOBUFS, ENOMEM:       Not enough free memory.  This often means that the memory allocation is limited by the socket buffer limits, not by the system memory.
-          EPERM:                 Firewall rules forbid connection.
-          EPROTO:                Protocol error.
-
-          // In addition, network errors for the new socket and as defined for the protocol may be returned. Various Linux kernels can return other errors
-          ENOSR:                 Out of streams resources
-          ETIMEDOUT:             Connection timed out
-        */
-          #ifndef NDEBUG
-            log_print("Non-critical error in function \"accept\": %s\nRepeat accept after pause\n", strerror(errno));
-          #else
-            fprintf(stderr, "Non-critical error in function \"accept\": %s\nRepeat accept after pause\n", strerror(errno));
-          #endif
+        default:
+          fprintf(stderr, "Non-critical error in function \"accept\": %s\nRepeat accept after pause\n", strerror(errno));
           sleep(1);
           continue;
-
       }
     }
-    #ifndef NDEBUG
-    else
-    {
-      connection_id++;
-      log_print("Connection accepted from %s:%d (connection_id = %d)\n", inet_ntoa(remote_address.sin_addr), (int)ntohs(remote_address.sin_port), connection_id);
-    }
-    #endif
 
     pid_t child_pid = fork();
 
-    if (child_pid == 0) // Child
+    if (child_pid == 0)
     {
-      // Close descriptors stdin, stdout, server_socket
       close_descriptor(STDIN_FILENO);
       close_descriptor(STDOUT_FILENO);
       close_descriptor(server_socket);
-      #ifndef NDEBUG
-        // Close server log descriptor and open connection log descriptor
-        log_close();
-        connection_log_init(connection_id);
-      #endif
 
       rc = process_connection(connection);
 
       close_descriptor(connection);
       break;
     }
-    else if (child_pid > 0) // Parent
+    else if (child_pid > 0)
     {
       close_descriptor(connection);
     }
-    else // fork() failed
+    else
     {
-      #ifndef NDEBUG
-        log_print("Error in function \"fork\": %s\n", strerror(errno));
-      #else
       fprintf(stderr, "Error in function \"fork\": %s\n", strerror(errno));
-      #endif
       close_descriptor(connection);
       rc = EXIT_FAILURE;
     }
@@ -229,19 +144,11 @@ int main()
   if (showboard_dir)
     free(showboard_dir);
 
-  #ifndef NDEBUG
-    log_close();
-  #endif
-
   return rc;
 }
 
-// catch SIGCHLD
-void clean_up_child_process(int signal_number)
+void clean_up_child_process()
 {
-  #ifndef NDEBUG
-    log_print("Received signal: %d\n", signal_number);
-  #endif
   int status;
   wait(&status);
 }
@@ -256,19 +163,10 @@ int close_descriptor(int d)
     {
       switch (errno)
       {
-        case EINTR:               // The system call was interrupted by a signal.
+        case EINTR:
           sleep(++attempts);
           continue;
         default:
-        /*
-          EBADF:                 fd isn't a valid open file descriptor.
-          EIO:                   An I/O error occurred.
-          ENOSPC, EDQUOT:        On NFS, these errors are not normally reported against the first write which exceeds the available storage space,
-                                 but instead against a subsequent write(), fsync(), or close().
-        */
-          #ifndef NDEBUG
-            log_print("Error in function \"close_descriptor(%d)\": %s\nRepeat close(descriptor) after pause\n", d, strerror(errno));
-          #endif
           sleep(++attempts);
       }
     }
@@ -276,25 +174,14 @@ int close_descriptor(int d)
   while (rc != 0 && attempts < MAX_CLOSE_DESCRIPTOR_ATTEMPTS);
 
   if (attempts == MAX_CLOSE_DESCRIPTOR_ATTEMPTS)
-  {
-    #ifndef NDEBUG
-      log_print("Tried to close_descriptor(%d), but all attempts failed.\n", d);
-    #endif
     return EXIT_FAILURE;
-  }
 
   return EXIT_SUCCESS;
 }
 
 int process_connection(int conn)
 {
-  #ifndef NDEBUG
-  char buffer[2];
-  //char buffer[TINY_BUFFER_SIZE];
-  //char buffer[SMALL_BUFFER_SIZE];
-  #else
   char buffer[STANDARD_BUFFER_SIZE];
-  #endif
   char* pos = buffer;
   ssize_t bytes_read = 0;
   int iError = NO_ERRORS;
@@ -304,21 +191,17 @@ int process_connection(int conn)
     char* method = NULL;
     char* request = NULL;
 
-    #ifndef NDEBUG
-      log_print("Received from client\n");
-    #endif
-
     if (iError == NO_ERRORS)
       iError = skip_spaces(conn, buffer, sizeof(buffer), &pos, &bytes_read, 1000);
 
     while (iError == NO_ERRORS && !method)
     {
       method = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 4);
-      if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
+      if (!method && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)
         iError = BAD_METHOD;
-      else if (!method && bytes_read == 0) // Some other read error (f.e. TIME_OUT)
+      else if (!method && bytes_read == 0)
         iError = vbx_errno;
-      else if (!method) // \r\n received and method is null
+      else if (!method)
       {
         while (bytes_read && (*pos == '\r' || *pos == '\n'))
         {
@@ -336,11 +219,11 @@ int process_connection(int conn)
     while (iError == NO_ERRORS && !request)
     {
       request = read_word(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
-      if (!request && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)  // Limit exceeded
+      if (!request && bytes_read == 0 && vbx_errno == LIMIT_EXCEEDED)
         iError = BAD_REQUEST;
-      else if (!request && bytes_read == 0) // Some other read error (f.e. TIME_OUT)
+      else if (!request && bytes_read == 0)
         iError = vbx_errno;
-      else if (!request)  // \r\n received and request is null
+      else if (!request)
       {
         while (bytes_read && (*pos == '\r' || *pos == '\n'))
         {
@@ -361,7 +244,7 @@ int process_connection(int conn)
         strline = read_line(conn, buffer, sizeof(buffer), &pos, &bytes_read, 32000);
         if (!strline && bytes_read == 0)
           iError = vbx_errno;
-        else if (!strline) // ???
+        else if (!strline)
           iError = BAD_REQUEST;
 
         if (iError == NO_ERRORS)
@@ -403,38 +286,20 @@ int process_connection(int conn)
   switch (iError)
   {
     case NO_ERRORS:
-      #ifndef NDEBUG
-        log_print("Request successfully completed.\n");
-      #endif
       break;
     case CONNECTION_CLOSED:
-      #ifndef NDEBUG
-        log_print("Connection unexpectedly terminated.\n");
-      #endif
       break;
     case TIME_OUT:
       send_request_timeout(conn);
-      #ifndef NDEBUG
-        log_print("Timeout exceeded.\n");
-      #endif
       break;
     case BAD_REQUEST:
       send_bad_request(conn);
-      #ifndef NDEBUG
-        log_print("Bad request received. Request completed.\n");
-      #endif
       break;
     case BAD_METHOD:
       send_bad_method(conn);
-      #ifndef NDEBUG
-        log_print("Bad method received. Request completed.\n");
-      #endif
       break;
     case NOT_FOUND:
       showboard(conn);
-      #ifndef NDEBUG
-        log_print("Resource not found. Request completed.\n");
-      #endif
       break;
   }
 
@@ -454,7 +319,7 @@ int process_get(int conn, const char* page)
   else if ((v = strstr(page, "?pump=")))
   {
     rc = pump(conn, page);
-    if (rc != NO_ERRORS) // Pump inform us about errors, but it processed it by itself, so we should ignore them
+    if (rc != NO_ERRORS)
       rc = NO_ERRORS;
   }
   else
@@ -474,33 +339,21 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
   int rc = poll(&fds, 1, READ_BLOCK_TIME_LIMIT);
   if (rc == -1)
   {
-    #ifndef NDEBUG
-      log_print("read_block: poll error (%s)\n", strerror(errno));
-    #endif
     vbx_errno = POLL_ERROR;
     return -1;
   }
   else if (rc == 0)
   {
-    #ifndef NDEBUG
-      log_print("read_block: poll error (Timeout exceeded)\n");
-    #endif
     vbx_errno = TIME_OUT;
     return -1;
   }
   else if (fds.revents & POLLHUP)
   {
-    #ifndef NDEBUG
-      log_print("read_block: poll info (Connection was terminated)\n");
-    #endif
     vbx_errno = CONNECTION_CLOSED;
     return -1;
   }
   else if (fds.revents & POLLERR)
   {
-    #ifndef NDEBUG
-      log_print("read_block: poll info (POLLERR)\n");
-    #endif
     vbx_errno = POLL_ERROR;
     return -1;
   }
@@ -509,30 +362,19 @@ ssize_t read_block(const int conn, char* buf, const ssize_t buf_size)
     bytes_read = read(conn, buf, buf_size - 1);
     if (bytes_read == 0)
     {
-      #ifndef NDEBUG
-        log_print("read_block: Readed 0 bytes. Connection terminated\n");
-      #endif
       vbx_errno = CONNECTION_CLOSED;
       return -1;
     }
     else if (bytes_read == -1)
     {
-      #ifndef NDEBUG
-        log_print("read_block: Error in function \"read\" (%s)\n", strerror(errno));
-        log_print("read_block: Connection unexpectedly terminated\n");
-      #endif
       vbx_errno = READ_BLOCK_ERROR;
       return -1;
     }
   }
 
   if (bytes_read > 0)
-  {
     *(buf + bytes_read) = '\0';
-    #ifndef NDEBUG
-      log_print("%s", buf);
-    #endif
-  }
+
   return bytes_read;
 }
 
@@ -547,33 +389,21 @@ ssize_t write_block(const int conn, const char* buf, const ssize_t count)
   int rc = poll(&fds, 1, WRITE_BLOCK_TIME_LIMIT);
   if (rc == -1)
   {
-    #ifndef NDEBUG
-      log_print("write_block: poll error (%s)\n", strerror(errno));
-    #endif
     vbx_errno = POLL_ERROR;
     return -1;
   }
   else if (rc == 0)
   {
-    #ifndef NDEBUG
-      log_print("write_block: poll error (Timeout exceeded)\n");
-    #endif
     vbx_errno = TIME_OUT;
     return -1;
   }
   else if (fds.revents & POLLHUP)
   {
-    #ifndef NDEBUG
-      log_print("write_block: poll info (Connection was terminated)\n");
-    #endif
     vbx_errno = CONNECTION_CLOSED;
     return -1;
   }
   else if (fds.revents & POLLERR)
   {
-    #ifndef NDEBUG
-      log_print("write_block: poll info (POLLERR)\n");
-    #endif
     vbx_errno = POLL_ERROR;
     return -1;
   }
@@ -582,18 +412,11 @@ ssize_t write_block(const int conn, const char* buf, const ssize_t count)
     bytes_wrote = write(conn, buf, count);
     if (bytes_wrote == 0)
     {
-      #ifndef NDEBUG
-        log_print("write_block: Wrote 0 bytes. Connection terminated\n");
-        vbx_errno = CONNECTION_CLOSED;
-        return -1;
-      #endif
+      vbx_errno = CONNECTION_CLOSED;
+      return -1;
     }
     else if (bytes_wrote == -1)
     {
-      #ifndef NDEBUG
-        log_print("write_block: Error in function \"write\" (%s)\n", strerror(errno));
-        log_print("write_block: Connection unexpectedly terminated\n");
-      #endif
       vbx_errno = WRITE_BLOCK_ERROR;
       return -1;
     }
@@ -613,9 +436,6 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       *bytes_read = read_block(conn, buf, buf_size);
       if (*bytes_read < 0)
       {
-        #ifndef NDEBUG
-          log_print("Read block error while skip spaces\n");
-        #endif
         *bytes_read = 0;
         return vbx_errno;
       }
@@ -631,9 +451,6 @@ int skip_spaces(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
     if (cnt < *bytes_read && total_cnt == read_limit && **pos == ' ')
     {
-      #ifndef NDEBUG
-      log_print("\nLimit exceeded while skip spaces\n");
-      #endif
       *pos = buf;
       *bytes_read = 0;
       vbx_errno = LIMIT_EXCEEDED;
@@ -660,9 +477,6 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       *bytes_read = read_block(conn, buf, buf_size);
       if (*bytes_read < 0)
       {
-        #ifndef NDEBUG
-          log_print("Read block error while read word\n");
-        #endif
         *bytes_read = 0;
         if (result)
           free(result);
@@ -680,9 +494,6 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
     if (cnt < *bytes_read && word_len == read_limit && **pos != ' ' && **pos != '\r' && **pos != '\n')
     {
-      #ifndef NDEBUG
-        log_print("\nLimit exceeded while read_word\n");
-      #endif
       *pos = buf;
       *bytes_read = 0;
       vbx_errno = LIMIT_EXCEEDED;
@@ -696,9 +507,6 @@ char* read_word(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       result = realloc(result, word_len + 1);
       if (!result)
       {
-        #ifndef NDEBUG
-          log_print("\nRealloc filed while read_word\n");
-        #endif
         vbx_errno = MALLOC_FAILED;
         return result;
       }
@@ -726,9 +534,6 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
       *bytes_read = read_block(conn, buf, buf_size);
       if (*bytes_read < 0)
       {
-        #ifndef NDEBUG
-          log_print("Read block error while read_line\n");
-        #endif
         *bytes_read = 0;
         if (result)
           free(result);
@@ -746,9 +551,6 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
 
     if (cnt < *bytes_read && total_read == read_limit && **pos != '\n')
     {
-      #ifndef NDEBUG
-      log_print("\nLimit exceeded while read_line\n");
-      #endif
       *pos = buf;
       *bytes_read = 0;
       vbx_errno = LIMIT_EXCEEDED;
@@ -760,9 +562,6 @@ char* read_line(const int conn, char* buf, const ssize_t buf_size, char** pos, s
     result = realloc(result, total_read + 1);
     if (!result)
     {
-      #ifndef NDEBUG
-        log_print("\nRealloc filed while read_line\n");
-      #endif
       vbx_errno = MALLOC_FAILED;
       return result;
     }
@@ -793,13 +592,13 @@ int parse_param_line(char* str)
   str = find_str_ncase(str, "Range:");
   if (str && saveptr == str)
   {
-    str += 6; // strlen("Range:")
+    str += 6;
     while (*str == ' ') str++;
     saveptr = str;
     str = find_str_ncase(str, "bytes=");
     if (str && saveptr == str)
     {
-      str += 6; // strlen("bytes=")
+      str += 6;
       while (*str == ' ') str++;
 
       long start_pos;
@@ -836,13 +635,7 @@ int parse_param_line(char* str)
             else
               return MALLOC_FAILED;
           }
-          // Currently will just ignore invalid ranges
-          // else if (!(start_pos == 0 && end_pos == 0) && ((start_pos >= end_pos && end_pos != 0) || (start_pos < 0 && end_pos != 0)))
-          //   return BAD_REQUEST;
         }
-        // Currently will just ignore invalid ranges
-        // else
-        //  return BAD_REQUEST;
 
         token = strtok_r(NULL, ",", &saveptr);
       }
@@ -895,10 +688,6 @@ void send_bad_request(const int conn)
 
   ssize_t lenght = strlen(bad_request_response);
   write_block(conn, bad_request_response, lenght);
-  #ifndef NDEBUG
-    log_print("Sended to client:\n");
-    log_print("%s", bad_request_response);
-  #endif
 }
 
 void send_request_timeout(const int conn)
@@ -917,10 +706,6 @@ void send_request_timeout(const int conn)
 
   ssize_t lenght = strlen(timeout_response);
   write_block(conn, timeout_response, lenght);
-  #ifndef NDEBUG
-    log_print("Sended to client:\n");
-    log_print("%s", timeout_response);
-  #endif
 }
 
 void send_bad_method(const int conn)
@@ -932,8 +717,4 @@ void send_bad_method(const int conn)
 
   ssize_t lenght = strlen(bad_method_response);
   write_block(conn, bad_method_response, lenght);
-  #ifndef NDEBUG
-    log_print("\nSended to client:\n");
-    log_print("%s", bad_method_response);
-  #endif
 }

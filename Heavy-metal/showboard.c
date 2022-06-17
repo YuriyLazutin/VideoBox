@@ -140,6 +140,7 @@ static char* note_template =
 "</div>\n";
 
 static char* page_end =
+"</div>\n"
 "<footer>\n"
 "<br>\n"
 "</footer>\n"
@@ -160,11 +161,6 @@ int showboard(int conn)
   if (rc < 0)
     return vbx_errno;
 
-  #ifndef NDEBUG
-    log_print("Sended to client:\n");
-    log_print("%s", page_begin);
-  #endif
-
   ssize_t sig_length, id_length, entry_length;
   char path[PATH_MAX];
   DIR *brd_dir, *id_dir;
@@ -175,38 +171,38 @@ int showboard(int conn)
   char descr[STANDARD_BUFFER_SIZE];
   char* brdnote = NULL;
 
-  if ((brd_dir = opendir(showboard_dir)) != NULL) // Open "${VBX_HOME}/showboard/"
+  if ((brd_dir = opendir(showboard_dir)) != NULL)
   {
-    memcpy(path, showboard_dir, showboard_dir_length); // Without NUL
+    memcpy(path, showboard_dir, showboard_dir_length);
     while ((brd_entry = readdir(brd_dir)) != NULL)
     {
       entry_length = strlen(brd_entry->d_name);
-      if ( entry_length != SIG_SIZE || strspn(brd_entry->d_name, SIG_CHARS) != SIG_SIZE)  // This is not vbx signature. Just skip such entry
+      if ( entry_length != SIG_SIZE || strspn(brd_entry->d_name, SIG_CHARS) != SIG_SIZE)
         continue;
       sig_length = showboard_dir_length + entry_length + 1;
-      if (sig_length + 1 > PATH_MAX) // Path overflow. Just skip such entry
+      if (sig_length + 1 > PATH_MAX)
         continue;
 
-      memcpy(path + showboard_dir_length, brd_entry->d_name, SIG_SIZE); // Without NUL
+      memcpy(path + showboard_dir_length, brd_entry->d_name, SIG_SIZE);
       path[sig_length - 1] = '/';
       path[sig_length] = '\0';
 
-      if ((id_dir = opendir(path)) != NULL)   // Open "${VBX_HOME}/showboard/<sig32>/"
+      if ((id_dir = opendir(path)) != NULL)
       {
         while ((id_entry = readdir(id_dir)) != NULL)
         {
           entry_length = strlen(id_entry->d_name);
-          if ( entry_length != ID_SIZE || strspn(id_entry->d_name, ID_CHARS) != ID_SIZE)  // This is not vbx id. Just skip such entry
+          if ( entry_length != ID_SIZE || strspn(id_entry->d_name, ID_CHARS) != ID_SIZE)
             continue;
           id_length = sig_length + entry_length + 1;
-          if (id_length + 1 > PATH_MAX) // Path overflow. Just skip such entry
+          if (id_length + 1 > PATH_MAX)
             continue;
 
-          memcpy(path + sig_length, id_entry->d_name, ID_SIZE); // Without NUL
+          memcpy(path + sig_length, id_entry->d_name, ID_SIZE);
           path[id_length - 1] = '/';
           path[id_length] = '\0';
 
-          if ( (rc = mk_href(href, path, id_length)) != NO_ERRORS) // Can't find video.mp4 or video.webm or path overflow
+          if ( (rc = mk_href(href, path, id_length)) != NO_ERRORS)
             continue;
           mk_trumb(trumb, path, id_length);
           mk_title(title, path, id_length);
@@ -225,10 +221,6 @@ int showboard(int conn)
                 free(brdnote);
               return vbx_errno;
             }
-
-            #ifndef NDEBUG
-              log_print("%s", brdnote);
-            #endif
           }
         }
         closedir(id_dir);
@@ -245,16 +237,9 @@ int showboard(int conn)
   if (rc < 0)
     return vbx_errno;
 
-  #ifndef NDEBUG
-    log_print("%s", page_end);
-  #endif
-
   return NO_ERRORS;
 }
 
-// In this function we assumes that:
-// 1) buffer (targeted by result pointer) has enough space to store SIG_SIZE + ID_SIZE string and 1 nul byte
-// 2) buffer (targeted by path pointer) has enough space to store PATH_MAX string
 int mk_href(char* result, char* path, const ssize_t path_length)
 {
   int found = 0;
@@ -284,9 +269,6 @@ int mk_href(char* result, char* path, const ssize_t path_length)
   return NO_ERRORS;
 }
 
-// In this function we assumes that:
-// 1) buffer (targeted by result pointer) has enough space to store https://yuriylazutin.github.io/lazutin.info/videobox/pics/logo.png string and 1 nul byte
-// 2) buffer (targeted by path pointer) has enough space to store PATH_MAX string
 void mk_trumb(char* result, char* path, const ssize_t path_length)
 {
   int found = 0;
@@ -333,9 +315,6 @@ void mk_trumb(char* result, char* path, const ssize_t path_length)
     strncpy(result, "https://yuriylazutin.github.io/lazutin.info/videobox/pics/logo.png", SMALL_BUFFER_SIZE);
 }
 
-// In this function we assumes that:
-// 1) buffer (targeted by result pointer) has enough space to store string(SMALL_BUFFER_SIZE) and 1 nul byte
-// 2) buffer (targeted by path pointer) has enough space to store PATH_MAX string
 void mk_title(char* result, char* path, const ssize_t path_length)
 {
   int iError = NO_ERRORS;

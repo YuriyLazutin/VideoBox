@@ -10,15 +10,9 @@
 #include <sys/sendfile.h> // sendfile
 #include <sys/stat.h> // struct stat
 #include <linux/limits.h> // PATH_MAX
-//#include <dirent.h> // DIR, struct dirent, PATH_MAX
-//#include <sys/types.h>
 
 #include "defines.h"
 #include "common.h"
-
-#ifndef NDEBUG
-  #include "logger.h"
-#endif
 
 extern char* showboard_dir;
 extern ssize_t showboard_dir_length;

@@ -204,32 +204,16 @@ int player_show(int conn, const char* params)
     char* itm = malloc(length);
     if (itm)
     {
-      int rc;
       snprintf(itm, length, video_template, video_href, trumb_href);
 
       length = strlen(page_begin);
-      rc = write_block(conn, page_begin, length);
-      #ifndef NDEBUG
-      if (rc > 0)
-      {
-        log_print("Sended to client:\n");
-        log_print("%s", page_begin);
-      }
-      #endif
+      write_block(conn, page_begin, length);
 
       length = strlen(itm);
-      rc = write_block(conn, itm, length);
-      #ifndef NDEBUG
-      if (rc > 0)
-        log_print("%s", itm);
-      #endif
+      write_block(conn, itm, length);
 
       length = strlen(page_end);
-      rc = write_block(conn, page_end, length);
-      #ifndef NDEBUG
-      if (rc > 0)
-        log_print("%s", page_end);
-      #endif
+      write_block(conn, page_end, length);
 
       free(itm);
     }

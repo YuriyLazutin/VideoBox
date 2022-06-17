@@ -3,34 +3,6 @@
 void send_not_found(const int conn);
 void send_range_not_satisfiable(const int conn, long size);
 
-/* PNG package
-HTTP/1.1 200 OK
-Date: Wed, 07 Jan 1970 17:17:24 GMT
-Server: Apache/2.4.7 (Ubuntu)
-Last-Modified: Wed, 07 Jan 1970 17:17:25 GMT
-ETag: W/"12a4-5dc9af5796040"
-Accept-Ranges: bytes
-Content-Length: 4772
-Connection: close
-Content-Type: image/png
-
-content of png...
-*/
-
-/* MP4 video
-HTTP/1.1 200 OK
-Date: Wed, 07 Jan 1970 17:32:58 GMT
-Server: Apache/2.4.7 (Ubuntu)
-Last-Modified: Wed, 07 Jan 1970 17:32:58 GMT
-ETag: W/"26-5dc9b3fae9180"
-Accept-Ranges: bytes
-Content-Length: 38
-Connection: close
-Content-Type: video/mp4
-
-content of mp4...
-*/
-
 static char* head_template =
 "HTTP/1.1 200 OK\n"
 "Accept-Ranges: bytes\n"
@@ -164,83 +136,34 @@ int pump(int conn, const char* params)
   {
     rc2 = fstat(read_fd, &file_info);
     if (rc2 == -1)
-    {
-      #ifndef NDEBUG
-        log_print("pump->fstat: %s\n", strerror(errno));
-      #endif
       rc = STAT_FAILED;
-    }
   }
 
   char buf[STANDARD_BUFFER_SIZE];
   if (rc == NO_ERRORS)
   {
-    if (!blocks) // send file as one block with 200 responce
+    if (!blocks)
     {
       if (rc == NO_ERRORS)
       {
         length = snprintf(buf, STANDARD_BUFFER_SIZE, head_template, file_info.st_size, mime_type);
         if (length < 0 || length >= STANDARD_BUFFER_SIZE)
-        {
-          #ifndef NDEBUG
-            log_print("pump->snprintf: buffer size too small\n");
-          #endif
           rc = BUFFER_OVERFLOW;
-        }
       }
 
       if (rc == NO_ERRORS)
-      {
-        ssize_t bytes_wrote = write_block(conn, buf, length);
-        #ifndef NDEBUG
-          if (bytes_wrote == length)
-          {
-            log_print("pump: Sended to client:\n");
-            log_print("%s", buf);
-          }
-          else if (bytes_wrote > 0)
-          {
-            log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
-            log_print("%s", buf);
-          }
-        #endif
-      }
+        write_block(conn, buf, length);
 
       if (rc == NO_ERRORS)
       {
         off_t offset = 0;
         ssize_t bytes_sent = sendfile(conn, read_fd, &offset, file_info.st_size);
         if (bytes_sent == -1)
-        {
-          #ifndef NDEBUG
-            log_print("pump: Error! sendfile filed (%s)\n", strerror(errno));
-          #endif
           rc = WRITE_BLOCK_ERROR;
-        }
-        #ifndef NDEBUG
-        else if (bytes_sent != file_info.st_size)
-          log_print("pump: Warning! sendfile sended less bytes then requested (%ld < %ld)\n", bytes_sent, file_info.st_size);
-        #endif
-
-        // Debug file output
-        #ifndef NDEBUG
-          log_print("File content here...\n");
-          /*while ((rc2 = read(read_fd, buf, STANDARD_BUFFER_SIZE - 1)) > 0)
-          {
-            buf[rc2] = '\0';
-            log_print("%s", buf);
-          }*/
-        #endif
       }
 
       if (rc == NO_ERRORS)
-      {
-        ssize_t bytes_wrote = write_block(conn, "\n\n", 2);
-        #ifndef NDEBUG
-          if (bytes_wrote == 2)
-            log_print("\n\n");
-        #endif
-      }
+        write_block(conn, "\n\n", 2);
     }
     else
     {
@@ -249,10 +172,6 @@ int pump(int conn, const char* params)
       struct block_range *pb = blocks;
       while (pb && rc == NO_ERRORS)
       {
-        #ifndef NDEBUG
-          log_print("pump: Process range (%ld, %ld)\n", pb->start, pb->end);
-        #endif
-
         if (pb->start < 0)
           pb->start = file_info.st_size - -pb->start;
 
@@ -261,90 +180,42 @@ int pump(int conn, const char* params)
         else if (pb->end < 0)
           pb->end = file_info.st_size - -pb->end;
 
-        if (pb->start < 0 || // offset > file_size
-            pb->end < 0 ||  // offset > file_size
-            pb->start > pb->end // invalid range
-           )
-        {
-          #ifndef NDEBUG
-            log_print("pump: Detected invalid range in request (start_pos = %ld, end_pos = %ld, file_size = %lu)\n", pb->start, pb->end, file_info.st_size);
-          #endif
+        if (pb->start < 0 || pb->end < 0 || pb->start > pb->end)
           rc = INVALID_RANGE;
-        }
-
-        // Collapse ranges here if needed
-        // ...
 
         pb = pb->pNext;
       }
 
-      // Prepare header
       if (rc == NO_ERRORS)
       {
-        if (!blocks->pNext) // Range bytes requested. send file as one block with 206 responce
+        if (!blocks->pNext)
         {
           send_cnt = blocks->end - blocks->start + 1;
           length = snprintf(buf, STANDARD_BUFFER_SIZE, partial_head_template, mime_type, blocks->start, blocks->end, file_info.st_size, send_cnt);
         }
-        else // A few range bytes requested. send file as few blocks with 206 responce
+        else
           length = snprintf(buf, STANDARD_BUFFER_SIZE, multipart_head, file_info.st_size);
 
         if (length < 0 || length >= STANDARD_BUFFER_SIZE)
-        {
-          #ifndef NDEBUG
-            log_print("pump->snprintf: buffer too small\n");
-          #endif
           rc = BUFFER_OVERFLOW;
-        }
       }
 
-      // Send header
       if (rc == NO_ERRORS)
-      {
-        ssize_t bytes_wrote = write_block(conn, buf, length);
-        #ifndef NDEBUG
-          if (bytes_wrote == length)
-          {
-            log_print("pump: Sended to client:\n");
-            log_print("%s", buf);
-          }
-          else if (bytes_wrote > 0)
-          {
-            log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
-            log_print("%s", buf);
-          }
-        #endif
-      }
+        write_block(conn, buf, length);
 
-      // Send file parts
       if (rc == NO_ERRORS)
       {
-        if (!blocks->pNext) // send file as one block
+        if (!blocks->pNext)
         {
           off_t offset = blocks->start;
           ssize_t bytes_sent = sendfile(conn, read_fd, &offset, send_cnt);
           if (bytes_sent == -1)
-          {
-            #ifndef NDEBUG
-              log_print("pump: Error! sendfile filed (%s)\n", strerror(errno));
-            #endif
             rc = WRITE_BLOCK_ERROR;
-          }
-          #ifndef NDEBUG
-          else if (bytes_sent != send_cnt)
-            log_print("pump: Warning! sendfile sended less bytes then requested (%ld < %ld)\n", bytes_sent, send_cnt);
-          #endif
 
           if (rc == NO_ERRORS)
-          {
             bytes_sent = write_block(conn, "\n\n", 2);
-            #ifndef NDEBUG
-              if (bytes_sent == 2)
-               log_print("\n\n");
-            #endif
-          }
         }
-        else // send file as few blocks
+        else
         {
           pb = blocks;
           while (pb && rc == NO_ERRORS)
@@ -352,62 +223,25 @@ int pump(int conn, const char* params)
             send_cnt = pb->end - pb->start + 1;
             length = snprintf(buf, STANDARD_BUFFER_SIZE, multipart_part_head_template, mime_type, pb->start, pb->end, file_info.st_size);
             if (length < 0 || length >= STANDARD_BUFFER_SIZE)
-            {
-              #ifndef NDEBUG
-                log_print("pump->snprintf: buffer too small\n");
-              #endif
               rc = BUFFER_OVERFLOW;
-            }
 
-            // Send multipart header
             if (rc == NO_ERRORS)
-            {
-              ssize_t bytes_wrote = write_block(conn, buf, length);
-              #ifndef NDEBUG
-                if (bytes_wrote == length)
-                  log_print("%s", buf);
-                else if (bytes_wrote > 0)
-                {
-                  log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
-                  log_print("%s", buf);
-                }
-              #endif
-            }
+              write_block(conn, buf, length);
 
-            // Send bytes range
             if (rc == NO_ERRORS)
             {
               off_t offset = pb->start;
               ssize_t bytes_sent = sendfile(conn, read_fd, &offset, send_cnt);
               if (bytes_sent == -1)
-              {
-                #ifndef NDEBUG
-                  log_print("pump: Error! sendfile filed (%s)\n", strerror(errno));
-                #endif
                 rc = WRITE_BLOCK_ERROR;
-              }
-              #ifndef NDEBUG
-              else if (bytes_sent != send_cnt)
-                log_print("pump: Warning! sendfile sended less bytes then requested (%ld < %ld)\n", bytes_sent, send_cnt);
-              #endif
             }
             pb = pb->pNext;
           }
 
-         // Send multipart_end
           if (rc == NO_ERRORS)
           {
             length = strlen(multipart_end);
-            ssize_t bytes_wrote = write_block(conn, multipart_end, length);
-            #ifndef NDEBUG
-              if (bytes_wrote == length)
-                log_print("%s", multipart_end);
-              else if (bytes_wrote > 0)
-              {
-                log_print("pump: partially sended to client (%ld bytes sended):\n", bytes_wrote);
-                log_print("%s", multipart_end);
-              }
-            #endif
+            write_block(conn, multipart_end, length);
           }
         }
       }
@@ -452,20 +286,7 @@ void send_not_found(const int conn)
     "\n";
 
   ssize_t length = strlen(not_found_response);
-  ssize_t bytes_wrote = write_block(conn, not_found_response, length);
-
-  #ifndef NDEBUG
-    if (bytes_wrote == length)
-    {
-      log_print("send_not_found: Sended to client:\n");
-      log_print("%s", not_found_response);
-    }
-    else if (bytes_wrote > 0)
-    {
-      log_print("send_not_found: Not found response partially sended to client (%ld bytes sended):\n", bytes_wrote);
-      log_print("%s", not_found_response);
-    }
-  #endif
+  write_block(conn, not_found_response, length);
 }
 
 void send_range_not_satisfiable(const int conn, long size)
@@ -479,34 +300,11 @@ void send_range_not_satisfiable(const int conn, long size)
   int bufsize = len + 64;
   char* buf = malloc(bufsize);
   if (!buf)
-  {
-    #ifndef NDEBUG
-      log_print("send_range_not_satisfiable: malloc failed.\n");
-    #endif
     return;
-  }
 
   len = snprintf(buf, bufsize, range_not_satisfiable_response_template, size);
   if (len < 0 || len >= bufsize)
-  {
-    #ifndef NDEBUG
-      log_print("send_range_not_satisfiable: snprintf failed.\n");
-    #endif
     return;
-  }
 
-  ssize_t bytes_wrote = write_block(conn, buf, len);
-
-  #ifndef NDEBUG
-    if (bytes_wrote == len)
-    {
-      log_print("send_range_not_satisfiable: Sended to client:\n");
-      log_print("%s", buf);
-    }
-    else if (bytes_wrote > 0)
-    {
-      log_print("send_range_not_satisfiable: partially sended to client (%ld bytes sended):\n", bytes_wrote);
-      log_print("%s", buf);
-    }
-  #endif
+  write_block(conn, buf, len);
 }
