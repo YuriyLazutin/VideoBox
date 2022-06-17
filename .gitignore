@@ -2,8 +2,10 @@
 *.o
 
 # Executables
-videobox
-publisher
+Heavy-metal/videobox
+Punk/videobox
+Rockstar/videobox
+Publisher/publisher
 
 # Build directories
 Debug
