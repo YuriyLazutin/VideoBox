@@ -140,6 +140,7 @@ static char* note_template =
 "</div>\n";
 
 static char* page_end =
+"</div>\n"
 "<footer>\n"
 "<br>\n"
 "</footer>\n"

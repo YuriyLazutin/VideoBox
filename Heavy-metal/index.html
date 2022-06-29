@@ -46,7 +46,12 @@
       lframe.src += location.search;
     </script>
     <div id="splitter"></div>
-    <div id="rframe"> <H1>Right frame</H1> </div>
+    <iframe src="toolbox.html" name="rframe" id="rframe" style="border: 0;"></iframe>
+    <script>
+      var rframe;
+      rframe = document.getElementById('rframe');
+      rframe.src += location.search;
+    </script>
   </body>
 </html>
 
@@ -68,6 +73,7 @@ function init()
 function spMouseDown(e)
 {
   lframe.style.pointerEvents = "none";
+  rframe.style.pointerEvents = "none";
   splitter.removeEventListener("mousedown", spMouseDown);
   window.addEventListener("mousemove", spMouseMove);
   window.addEventListener("mouseup", spMouseUp);
@@ -78,8 +84,10 @@ function spMouseUp(e)
   lframe.style.width = e.clientX + "px";
   splitter.style.marginLeft = e.clientX + "px";
   rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
+  rframe.style.width = window.innerWidth - (e.clientX + splitter.clientWidth) + "px";
 
   lframe.style.pointerEvents = "auto";
+  rframe.style.pointerEvents = "auto";
 
   window.removeEventListener("mousemove", spMouseMove);
   window.removeEventListener("mouseup", spMouseUp);
@@ -91,5 +99,6 @@ function spMouseMove(e)
   lframe.style.width = e.clientX + "px";
   splitter.style.marginLeft = e.clientX + "px";
   rframe.style.marginLeft = e.clientX + splitter.clientWidth + "px";
+  rframe.style.width = window.innerWidth - (e.clientX + splitter.clientWidth) + "px";
 }
 </script>
