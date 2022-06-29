@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# Video box server installation script
+# Author: Yuriy Lazutin
+# Site: lazutin.info
+# Location: Tomsk, Siberia
+# Creation: 2022-june-30
+# Donates:
+#          https://www.paypal.com/paypalme/yuriylazutin
+#          https://www.patreon.com/yuriylazutin
+
+export VBX_GROUP=videobox
+export VBX_USER=videobox
+export VBX_HOME=/opt/videobox
+export LOCAL_BIN_DIR=/usr/local/bin
