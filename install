@@ -12,4 +12,247 @@
 export VBX_GROUP=videobox
 export VBX_USER=videobox
 export VBX_HOME=/opt/videobox
+export VBX_CONFIGURATION=Heavy-metal
 export LOCAL_BIN_DIR=/usr/local/bin
+
+function AddGroup {
+  echo -n "Try to find ${1} in /etc/group: "
+  grep "^${1}:" /etc/group > /dev/null
+
+  if [ $? -eq 0 ]; then
+    echo -e "\033[1;32mFound\033[0m"
+  else
+    echo -e "\033[1;31mNot found\033[0m"
+
+    sudo groupadd ${1}
+    if [ $? -eq 0 ]; then
+      result="\033[1;32mDone\033[0m"
+    else
+      result="\033[1;31mFailed\033[0m"
+    fi
+    echo -e "Creating new group (${1}): ${result}"
+  fi
+}
+
+function AddUser {
+  echo -n "Try to find user ${1} in /etc/passwd: "
+  grep "^${1}:" /etc/passwd > /dev/null
+
+  if [ $? -eq 0 ]; then
+    echo -e "\033[1;32mFound\033[0m"
+  else
+    echo -e "\033[1;31mNot found\033[0m"
+
+    sudo useradd --home-dir ${2} --gid ${3} --groups ${4} --create-home --no-user-group --shell /bin/bash ${1}
+    if [ $? -eq 0 ]; then
+      result="\033[1;32mDone\033[0m"
+    else
+      result="\033[1;31mFailed\033[0m"
+    fi
+    echo -e "Creating new user (${1}): ${result}"
+
+    echo "Please provide a new password for user \"${1}\": "
+    sudo passwd ${1}
+    if [ $? -eq 0 ]; then
+      result="\033[1;32mDone\033[0m"
+    else
+      result="\033[1;31mFailed\033[0m"
+    fi
+    echo -e "Changing password for new user (${1}): ${result}"
+
+    sudo chown -R ${1}:${3} ${2}
+    if [ $? -eq 0 ]; then
+      result="\033[1;32mDone\033[0m"
+    else
+      result="\033[1;31mFailed\033[0m"
+    fi
+    echo -e "Setting up ownership of home directory for new user (${1}): ${result}"
+
+    sudo chmod u=rwx,g=rx,o-rwx ${2}
+    if [ $? -eq 0 ]; then
+      result="\033[1;32mDone\033[0m"
+    else
+      result="\033[1;31mFailed\033[0m"
+    fi
+    echo -e "Setting access level for home directory: ${result}"
+
+  fi
+}
+
+
+### Checking software requirements
+echo "Checking software requirements"
+check_failed=0
+
+#gcc
+echo -n "gcc: "
+gcc --version &> /dev/null
+if [ $? -ne 0 ]; then
+  echo -e "\033[1;31mNot found\033[0m"
+  check_failed=1
+else
+  echo -e "\033[1;32mFound\033[0m"
+fi
+
+#make
+echo -n "make: "
+make --version &> /dev/null
+if [ $? -ne 0 ]; then
+  echo -e "\033[1;31mNot found\033[0m"
+  check_failed=1
+else
+  echo -e "\033[1;32mFound\033[0m"
+fi
+
+if [ ${check_failed} -ne 0 ]; then
+  echo "Some required tools was not found on your host. Please install it first"
+  echo -e "\033[1;31mInstallation aborted\033[0m"
+  exit 1
+fi
+
+
+### Create users and groups
+echo "Creating user and group"
+AddGroup ${VBX_GROUP}
+
+# Check default parameters for new user
+# useradd -D
+#
+#   GROUP=100
+#   HOME=/home
+#   INACTIVE=-1
+#   EXPIRE=
+#   SHELL=/bin/sh
+#   SKEL=/etc/skel
+#   CREATE_MAIL_SPOOL=no
+
+#AddUser user home-dir main-group opt-groups
+AddUser ${VBX_USER} ${VBX_HOME} ${VBX_GROUP} ${VBX_GROUP}
+
+
+### ToDo: Request preferable configuration
+
+
+### Compiling software
+echo "Compiling software"
+echo -n "Compiling server: "
+make --silent --directory="./${VBX_CONFIGURATION}"
+if [ $? -ne 0 ]; then
+  echo -e "\033[1;31mFailed\033[0m"
+  check_failed=1
+else
+  echo -e "\033[1;32mDone\033[0m"
+fi
+
+echo -n "Compiling publisher: "
+make --silent --directory="./Publisher"
+if [ $? -ne 0 ]; then
+  echo -e "\033[1;31mFailed\033[0m"
+  check_failed=1
+else
+  echo -e "\033[1;32mDone\033[0m"
+fi
+
+if [ ${check_failed} -ne 0 ]; then
+  echo "Some binaries was not compiled successfully"
+  echo -e "\033[1;31mInstallation aborted\033[0m"
+  exit 1
+fi
+
+
+### Installing software
+echo "Installing software"
+echo -n "Copying files: "
+sudo cp --interactive "./${VBX_CONFIGURATION}/videobox" "${VBX_HOME}/videobox"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chown ${VBX_USER}:${VBX_GROUP} "${VBX_HOME}/videobox"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chmod u=rwx,g=rx,o-rwx "${VBX_HOME}/videobox"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo cp --interactive "./Publisher/publisher" "${VBX_HOME}/publisher"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chown ${VBX_USER}:${VBX_GROUP} "${VBX_HOME}/publisher"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chmod u=rwx,g=rx,o-rwx "${VBX_HOME}/publisher"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+if [ ${check_failed} -ne 0 ]; then
+  echo -e "\033[1;31mFailed\033[0m"
+else
+  echo -e "\033[1;32mDone\033[0m"
+fi
+
+echo -n "Creating symlinks: "
+sudo ln --interactive --symbolic "${VBX_HOME}/videobox" "${LOCAL_BIN_DIR}/videobox"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo ln --interactive --symbolic "${VBX_HOME}/publisher" "${LOCAL_BIN_DIR}/publisher"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+if [ ${check_failed} -ne 0 ]; then
+  echo -e "\033[1;31mFailed\033[0m"
+else
+  echo -e "\033[1;32mDone\033[0m"
+fi
+
+echo -n "Creating uninstall script: "
+echo "#!/bin/bash
+
+# Video box server uninstallation script
+# Author: Yuriy Lazutin
+# Site: lazutin.info
+# Location: Tomsk, Siberia
+# Creation: 2022-june-30
+# Donates:
+#          https://www.paypal.com/paypalme/yuriylazutin
+#          https://www.patreon.com/yuriylazutin
+
+export VBX_GROUP=${VBX_GROUP}
+export VBX_USER=${VBX_USER}
+export VBX_HOME=${VBX_HOME}
+export VBX_CONFIGURATION=${VBX_CONFIGURATION}
+export LOCAL_BIN_DIR=${LOCAL_BIN_DIR}
+
+" > "./uninstall"
+
+sudo cp --interactive "./uninstall" "${VBX_HOME}/uninstall"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chown ${VBX_USER}:${VBX_GROUP} "${VBX_HOME}/uninstall"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+sudo chmod u=rwx,g=rx,o-rwx "${VBX_HOME}/uninstall"
+if [ $? -ne 0 ]; then
+  check_failed=1
+fi
+
+if [ ${check_failed} -ne 0 ]; then
+  echo -e "\033[1;31mFailed\033[0m"
+else
+  echo -e "\033[1;32mDone\033[0m"
+fi
