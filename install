@@ -234,6 +234,62 @@ export VBX_HOME=${VBX_HOME}
 export VBX_CONFIGURATION=${VBX_CONFIGURATION}
 export LOCAL_BIN_DIR=${LOCAL_BIN_DIR}
 
+function DeleteObject {
+  if [ -e \"\${1}\" ]; then
+    echo -n \"Removing \\\"\${1}\\\": \"
+    rm -rf \"\${1}\"
+    if [ \$? -eq 0 ]; then
+      echo -e \"\\033[1;32mDone\\033[0m\"
+    else
+      echo -e \"\\033[1;31mFailed\\033[0m\"
+    fi
+  fi
+}
+
+# check for zero UID
+RUID=\$( /usr/bin/id | awk -F\\( '{print \$1}' | awk -F= '{print \$2}' )
+if [ \${RUID} -ne 0 ]; then
+  echo \"You must be logged in as user with UID as zero (e.g. root user) to run this script.\"
+  echo \"Log in as user with UID as zero (e.g. root user) and restart this script.\"
+  exit 1
+fi
+
+# Kill all processes (sending -KILL signal (9))
+pkill -9 -u \"\${VBX_USER}\"
+
+# Removing symlinks
+DeleteObject \"\${LOCAL_BIN_DIR}/videobox\"
+DeleteObject \"\${LOCAL_BIN_DIR}/publisher\"
+
+# Removing software
+#DeleteObject \"\${VBX_HOME}\"
+
+# Removing user and group
+grep \"^\${VBX_USER}:\" /etc/passwd > /dev/null
+if [ \$? -ne 0 ]; then
+  echo \"No user \\\"\${VBX_USER}\\\" found\"
+else
+  echo -n \"Removing user \\\"\${VBX_USER}\\\": \"
+  userdel --remove \${VBX_USER}
+  if [ \$? -eq 0 ]; then
+    echo -e \"\\033[1;32mDone\\033[0m\"
+  else
+    echo -e \"\\033[1;31mFailed\\033[0m\"
+  fi
+fi
+
+grep \"^\${VBX_GROUP}:\" /etc/group > /dev/null
+if [ \$? -ne 0 ]; then
+  echo \"No group \\\"\${VBX_GROUP}\\\" found\"
+else
+  echo -n \"Removing group \\\"\${VBX_GROUP}\\\": \"
+  groupdel \${VBX_GROUP}
+  if [ \$? -eq 0 ]; then
+    echo -e \"\\033[1;32mDone\\033[0m\"
+  else
+    echo -e \"\\033[1;31mFailed\\033[0m\"
+  fi
+fi
 " > "./uninstall"
 
 sudo cp --interactive "./uninstall" "${VBX_HOME}/uninstall"
